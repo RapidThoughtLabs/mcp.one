@@ -71,7 +71,7 @@ export class ChatEngine {
     this.messages.push(userMsg)
 
     const loopOptions: ToolLoopOptions = {
-      maxIterations: this.options.maxIterations ?? 10,
+      maxIterations: this.options.maxIterations ?? 25,
       signal: this.abortController.signal,
     }
 

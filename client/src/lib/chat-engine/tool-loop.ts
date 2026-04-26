@@ -29,7 +29,7 @@ export interface ToolExecutor {
 }
 
 export interface ToolLoopOptions {
-  maxIterations?: number  // default: 10
+  maxIterations?: number  // default: 25
   signal?: AbortSignal
 }
 
@@ -83,7 +83,7 @@ export async function runToolLoop(
   callbacks: ChatEngineCallbacks,
   options: ToolLoopOptions = {},
 ): Promise<ChatMessage[]> {
-  const maxIter = options.maxIterations ?? 10
+  const maxIter = options.maxIterations ?? 25
   const signal = options.signal
 
   const history = [...messages]
@@ -103,6 +103,7 @@ export async function runToolLoop(
     let pendingToolCalls: ToolCallRequest[] = []
     let streamDone = false
     let streamError: Error | null = null
+    let messageStarted = false
 
     // Create the assistant message placeholder for streaming
     const assistantMsgId = genId()
@@ -124,6 +125,7 @@ export async function runToolLoop(
                 isStreaming: true,
               }
               callbacks.onMessageStart(msg)
+              messageStarted = true
             }
             accumulatedContent += token
             callbacks.onMessageDelta(assistantMsgId, token)
@@ -176,7 +178,13 @@ export async function runToolLoop(
       timestamp: Date.now(),
       isStreaming: false,
     }
-    callbacks.onMessageStart(assistantMsg)
+    // If streaming already started for this message, finalize in-place to
+    // avoid adding a second entry with the same id (duplicate key warning).
+    if (messageStarted) {
+      callbacks.onMessageComplete(assistantMsg)
+    } else {
+      callbacks.onMessageStart(assistantMsg)
+    }
     history.push(assistantMsg)
 
     // Execute all tool calls (parallel)

@@ -120,7 +120,7 @@ export function useChat() {
         updateMessageContent(msgId, delta)
       },
       onMessageComplete: (msg: ChatMessage) => {
-        finalizeMessage(msg.id, { content: msg.content, isStreaming: false })
+        finalizeMessage(msg.id, { content: msg.content, toolCalls: msg.toolCalls, isStreaming: false })
         setStreaming(false)
       },
       onToolCallStart: (msgId: string, toolCall: ToolCallRequest) => {
