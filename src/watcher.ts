@@ -17,10 +17,10 @@ const DEBOUNCE_MS = 300;
 
 // ── Internal helpers ───────────────────────────────────────────────
 
-/** Returns true if the path looks like a mcp.*.json config file. */
+/** Returns true if the path looks like a mcp.*.json config file (excluding the reserved mcp.one.json). */
 function isMcpConfigFile(filePath: string): boolean {
   const base = path.basename(filePath);
-  return base.startsWith("mcp.") && base.endsWith(".json");
+  return base.startsWith("mcp.") && base.endsWith(".json") && base !== "mcp.one.json";
 }
 
 function makeDebouncer() {

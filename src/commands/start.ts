@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { loadConfigs } from "../loader.js";
 import { startServer } from "../server.js";
 import { loadSystemConfig } from "../system-config.js";
@@ -7,6 +8,7 @@ import { checkAuthEnvVars } from "../auth/index.js";
 import { resolveConfigDir } from "../lib/resolve-config-dir.js";
 import { VERSION } from "../lib/version.js";
 import { log } from "../lib/logger.js";
+import { INTERNAL_CONFIG } from "../internal-config.js";
 import { connectorRegistry } from "../connectors/registry.js";
 import { HttpConnector } from "../connectors/http.js";
 import { CliConnector } from "../connectors/cli.js";
@@ -63,6 +65,12 @@ export async function run(args: string[]): Promise<void> {
   const systemConfig = loadSystemConfig(process.cwd());
   const configDir = resolveConfigDir(positionalArgs[0], systemConfig);
 
+  // Auto-create the config dir on first run so the watcher and loader always have a target
+  if (!fs.existsSync(configDir)) {
+    fs.mkdirSync(configDir, { recursive: true });
+    log.info("server", `Created config dir: ${configDir}`);
+  }
+
   // ── Register connectors ──────────────────────────────────────────
 
   const mcpConnector      = new McpConnector();
@@ -90,19 +98,26 @@ export async function run(args: string[]): Promise<void> {
 
   log.info("server", `Loading configs from: ${configDir}`);
 
-  const handAuthored = loadConfigs(configDir);
+  // "one" is reserved — the internal config is embedded and always takes precedence
+  const handAuthored = loadConfigs(configDir).filter((c) => {
+    if (c.id === "one") {
+      log.warn("server", `mcp.one.json in ${configDir} is ignored — internal config is built-in`);
+      return false;
+    }
+    return true;
+  });
   const autoDiscovered = discoverMcpServers();
 
-  // Hand-authored ids take precedence on collision
+  // Internal config is always first; hand-authored ids take precedence over auto-discovered
   const handAuthoredIds = new Set(handAuthored.map((c) => c.id));
   const allConfigs = [
+    INTERNAL_CONFIG,
     ...handAuthored,
-    ...autoDiscovered.filter((c) => !handAuthoredIds.has(c.id)),
+    ...autoDiscovered.filter((c) => !handAuthoredIds.has(c.id) && c.id !== "one"),
   ];
 
-  if (allConfigs.length === 0) {
-    log.error("server", "No configs loaded. Place mcp.*.json files in the config directory.");
-    process.exit(1);
+  if (handAuthored.length === 0 && autoDiscovered.length === 0) {
+    log.info("server", `No user configs yet — drop mcp.*.json files in ${configDir} or call one.registry_install`);
   }
 
   // Queue MCP, GraphQL, and gRPC configs for discovery during initAll()
