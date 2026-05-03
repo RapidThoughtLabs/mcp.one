@@ -232,6 +232,8 @@ export interface ManifestEntry {
   registry: string;
   connector_type: string;
   installed_at: string;
+  /** Parent's qualified_slug if this config is a fork; null/absent for legacy entries. */
+  forked_from?: string | null;
 }
 
 export interface Manifest {
@@ -252,7 +254,13 @@ export function saveManifest(manifest: Manifest): void {
   fs.writeFileSync(MANIFEST_FILE, JSON.stringify(manifest, null, 2) + "\n", "utf-8");
 }
 
-export function addToManifest(qualifiedSlug: string, version: string, connectorType: string, registry = "default"): void {
+export function addToManifest(
+  qualifiedSlug: string,
+  version: string,
+  connectorType: string,
+  registry = "default",
+  forkedFrom: string | null = null,
+): void {
   const manifest = loadManifest();
   const idx = manifest.installed.findIndex(
     (e) => e.slug === qualifiedSlug && e.registry === registry,
@@ -263,6 +271,7 @@ export function addToManifest(qualifiedSlug: string, version: string, connectorT
     registry,
     connector_type: connectorType,
     installed_at: new Date().toISOString(),
+    forked_from: forkedFrom,
   };
 
   if (idx !== -1) {
@@ -278,6 +287,27 @@ export function getInstalledEntriesByBareName(bareName: string, registry: string
   return loadManifest().installed.filter((e) => {
     const bareSlug = e.slug.replace(/:.*$/, ""); // strip :connector
     return bareSlug === bareName && e.registry === registry;
+  });
+}
+
+/**
+ * Find the manifest entry whose bare slug matches `rawSlug` and connector_type matches `connectorType`.
+ * Used to detect cross-namespace collisions on the same on-disk filename.
+ * Returns undefined if no entry matches.
+ */
+export function findEntryByBareSlugAndConnector(
+  rawSlug: string,
+  connectorType: string,
+  registry: string,
+): ManifestEntry | undefined {
+  return loadManifest().installed.find((e) => {
+    if (e.registry !== registry) return false;
+    const slashIdx = e.slug.indexOf("/");
+    if (slashIdx === -1) return false;
+    const afterSlash = e.slug.slice(slashIdx + 1);
+    const colonIdx = afterSlash.indexOf(":");
+    const bare = colonIdx !== -1 ? afterSlash.slice(0, colonIdx) : afterSlash;
+    return bare === rawSlug && e.connector_type === connectorType;
   });
 }
 

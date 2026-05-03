@@ -5,13 +5,14 @@
  * API keys stay in sessionStorage only.
  */
 
-import type { ProviderConfig, OpenAITool, OpenAIMessage, ToolCallRequest } from './types'
+import type { ProviderConfig, OpenAITool, OpenAIMessage, ToolCallRequest, TokenUsage } from './types'
 
 interface StreamCallbacks {
   onToken: (token: string) => void
   onToolCalls: (calls: ToolCallRequest[]) => void
   onDone: () => void
   onError: (err: Error) => void
+  onUsage?: (usage: TokenUsage) => void
 }
 
 export async function streamChatCompletion(
@@ -35,6 +36,7 @@ export async function streamChatCompletion(
         messages,
         ...(tools.length > 0 ? { tools, tool_choice: 'auto' } : {}),
         stream: true,
+        stream_options: { include_usage: true },
       }),
       signal,
     })
@@ -103,11 +105,25 @@ export async function streamChatCompletion(
             }
             finish_reason?: string | null
           }>
+          usage?: {
+            prompt_tokens: number
+            completion_tokens: number
+            total_tokens: number
+          }
         }
 
         try {
           chunk = JSON.parse(trimmed.slice(6))
         } catch { continue }
+
+        // Usage chunk arrives after the last delta (choices may be empty)
+        if (chunk.usage && callbacks.onUsage) {
+          callbacks.onUsage({
+            input: chunk.usage.prompt_tokens,
+            output: chunk.usage.completion_tokens,
+            total: chunk.usage.total_tokens,
+          })
+        }
 
         const choice = chunk.choices?.[0]
         if (!choice) continue

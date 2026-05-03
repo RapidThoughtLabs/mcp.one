@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "diff": "^8.0.3",
+    "gpt-tokenizer": "^3.4.0",
     "lucide-react": "^0.577.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

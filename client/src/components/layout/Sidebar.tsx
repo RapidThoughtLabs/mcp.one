@@ -7,7 +7,7 @@ const NAV_ITEMS: { page: Page; icon: typeof MessageSquare; label: string; soon?:
   { page: 'configs', icon: Settings2, label: 'Configs' },
   { page: 'registry', icon: Package, label: 'Registry' },
   { page: 'logs', icon: ScrollText, label: 'Logs' },
-  { page: 'prompts', icon: Sparkles, label: 'Prompts', soon: true },
+  { page: 'prompts', icon: Sparkles, label: 'Prompts' },
 ]
 
 export function Sidebar() {

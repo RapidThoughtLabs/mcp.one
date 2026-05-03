@@ -28,6 +28,8 @@ interface AuthFormSectionProps {
   fields: AuthFields
   onChange: (fields: AuthFields) => void
   errors?: Record<string, string>
+  lockedType?: AuthType
+  labels?: { usernameEnv?: string; tokenEnv?: string }
 }
 
 const AUTH_OPTIONS: { value: AuthType; label: string; desc: string }[] = [
@@ -63,12 +65,13 @@ function Field({ label, hint, error, children }: { label: string; hint?: string;
   )
 }
 
-export function AuthFormSection({ fields, onChange, errors = {} }: AuthFormSectionProps) {
+export function AuthFormSection({ fields, onChange, errors = {}, lockedType, labels }: AuthFormSectionProps) {
   const set = (partial: Partial<AuthFields>) => onChange({ ...fields, ...partial })
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Auth type selector */}
+      {/* Auth type selector — hidden when lockedType is set */}
+      {!lockedType && (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <label style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.07em' }}>AUTH TYPE</label>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -102,6 +105,7 @@ export function AuthFormSection({ fields, onChange, errors = {} }: AuthFormSecti
           })}
         </div>
       </div>
+      )}
 
       {/* Bearer fields */}
       {fields.authType === 'bearer' && (
@@ -126,9 +130,9 @@ export function AuthFormSection({ fields, onChange, errors = {} }: AuthFormSecti
       )}
 
       {/* Basic auth fields */}
-      {fields.authType === 'basic' && (
+      {(fields.authType === 'basic' || lockedType === 'basic') && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '14px 16px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6 }}>
-          <Field label="USERNAME ENV VAR *" error={errors['auth.username_env']}>
+          <Field label={labels?.usernameEnv ?? 'USERNAME ENV VAR *'} error={errors['auth.username_env']}>
             <input
               style={{ ...inputStyle, borderColor: errors['auth.username_env'] ? 'rgba(255,95,87,0.5)' : 'var(--border2)' }}
               value={fields.basicUsernameEnv}
@@ -136,7 +140,7 @@ export function AuthFormSection({ fields, onChange, errors = {} }: AuthFormSecti
               placeholder="e.g. MY_SERVICE_USER"
             />
           </Field>
-          <Field label="PASSWORD ENV VAR *" error={errors['auth.token_env']}>
+          <Field label={labels?.tokenEnv ?? 'PASSWORD ENV VAR *'} error={errors['auth.token_env']}>
             <input
               style={{ ...inputStyle, borderColor: errors['auth.token_env'] ? 'rgba(255,95,87,0.5)' : 'var(--border2)' }}
               value={fields.basicTokenEnv}

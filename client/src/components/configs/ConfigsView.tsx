@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Plus, Settings2, AlertCircle, CheckCircle, RefreshCw, Loader2, ChevronDown, Pencil, KeyRound, ExternalLink, Trash2 } from 'lucide-react'
+import { Plus, Settings2, AlertCircle, CheckCircle, RefreshCw, Loader2, ChevronDown, Pencil, KeyRound, ExternalLink, Trash2, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { useConfigs } from '@/hooks/useConfigs'
 import { ConfigDesigner } from './ConfigDesigner'
 import { ConfigEditor } from './ConfigEditor'
 import { ConfigDetailView } from './ConfigDetailView'
+import { PublishModal } from './PublishModal'
 import { api } from '@/lib/api'
 import type { ConfigSummary } from '@/types/server'
 
@@ -43,7 +44,7 @@ function CredentialForm({ configId, missingVars, onSaved }: {
     setSaving(true)
     setError(null)
     try {
-      await api.post('/credentials', { configId, entries })
+      await api.post('/credentials', { configId, entries, overwrite: true })
       onSaved()
     } catch (err) {
       setError((err as Error).message)
@@ -98,6 +99,7 @@ function CredentialForm({ configId, missingVars, onSaved }: {
 function ConfigCard({ cfg, onEdit, onOpen, onRefetch }: { cfg: ConfigSummary; onEdit: () => void; onOpen: () => void; onRefetch: () => void }) {
   const [expanded, setExpanded] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [publishOpen, setPublishOpen] = useState(false)
   const { deleteConfig } = useConfigs()
   const hasAuth = !!cfg.auth
   const authOk = cfg.auth?.ok ?? true
@@ -227,6 +229,10 @@ function ConfigCard({ cfg, onEdit, onOpen, onRefetch }: { cfg: ConfigSummary; on
               <Pencil size={10} style={{ marginRight: 5 }} />
               Edit
             </Button>
+            <Button size="sm" variant="ghost" onClick={() => setPublishOpen(true)}>
+              <Upload size={10} style={{ marginRight: 5 }} />
+              Publish
+            </Button>
             <Button size="sm" variant="ghost" onClick={() => void handleDelete()} disabled={deleting}
               style={{ color: 'var(--red)', marginLeft: 'auto' }}
             >
@@ -237,6 +243,7 @@ function ConfigCard({ cfg, onEdit, onOpen, onRefetch }: { cfg: ConfigSummary; on
               Delete
             </Button>
           </div>
+          <PublishModal open={publishOpen} onClose={() => setPublishOpen(false)} cfg={cfg} />
         </div>
       )}
     </div>

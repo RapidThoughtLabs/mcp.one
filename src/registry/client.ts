@@ -277,6 +277,8 @@ export interface ConfigMeta {
   };
   created_at: string;
   updated_at: string;
+  /** Parent's qualified_slug if this config is a fork; null/absent otherwise. Immediate parent only. */
+  forked_from?: string | null;
 }
 
 export interface PaginatedResponse<T> {
@@ -481,7 +483,7 @@ export async function publishNew(
 }
 
 export interface PublishVersionPayload {
-  version: string;
+  version?: string;   // ignored by the registry — kept optional for CLI compat
   payload: unknown;
   message: string;
 }

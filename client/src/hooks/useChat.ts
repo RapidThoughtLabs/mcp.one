@@ -12,14 +12,13 @@ import { api } from '@/lib/api'
 import {
   ChatEngine,
   buildConfigCatalog,
-  composeSystemPrompt,
   type ChatMessage,
   type ToolCallRequest,
   type ToolCallResult,
   type OpenAITool,
   type ToolExecutor,
 } from '@/lib/chat-engine'
-import type { McpTool, ConfigSummary } from '@/types/server'
+import type { McpTool } from '@/types/server'
 import promptData from '@/prompts/default.json'
 
 // Convert McpTool (server format) → OpenAI tool format
@@ -35,17 +34,19 @@ function mcpToOpenAI(tool: McpTool): OpenAITool {
 }
 
 export function useChat() {
-  const { tools, serverStatus } = useAppStore()
+  const { tools, serverStatus, configs } = useAppStore()
   const {
     provider,
     providerPickerOpen,
     activeTemplateId,
     messages,
     isStreaming,
+    tokenUsage,
     addMessage,
     updateMessageContent,
     finalizeMessage,
     updateToolCallResult,
+    addUsage,
     clearMessages,
     setStreaming,
     setProviderModel,
@@ -56,7 +57,7 @@ export function useChat() {
     setActiveTemplateId,
   } = useChatStore()
 
-  const { getModels, setSelectedModel } = useLlmStore()
+  const { setSelectedModel } = useLlmStore()
 
   const engineRef = useRef<ChatEngine | null>(null)
 
@@ -102,7 +103,7 @@ export function useChat() {
 
       getTools: async () => {
         try {
-          const fresh = await api.get<McpTool[]>('/tools')
+          const fresh = await api.get<McpTool[]>('/tools/manifest')
           return fresh.map(mcpToOpenAI)
         } catch {
           // Fallback to cached tools from app store
@@ -139,40 +140,35 @@ export function useChat() {
           timestamp: Date.now(),
         })
       },
+      onUsage: (usage) => {
+        addUsage(usage)
+      },
     })
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [provider])
 
-  // Build system prompt when provider or template changes
-  const buildPrompt = useCallback(async () => {
+  // Build system prompt when template or installed configs change
+  const buildPrompt = useCallback(() => {
     const engine = engineRef.current
     if (!engine) return
 
-    try {
-      const configs = await api.get<ConfigSummary[]>('/configs')
-      const catalog = buildConfigCatalog(
-        configs.map((c) => ({
-          id: c.id,
-          name: c.name,
-          description: c.description,
-          connector_type: c.connector?.type ?? 'unknown',
-          tool_count: c.toolCount,
-        })),
-      )
-      // promptData is imported as the PromptFile JSON
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      engine.buildSystemPrompt(promptData as any, activeTemplateId, {
-        config_catalog: catalog,
-      })
-    } catch {
-      // Build without catalog if configs endpoint fails
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      engine.buildSystemPrompt(promptData as any, activeTemplateId, {})
-    }
-  }, [activeTemplateId])
+    const catalog = buildConfigCatalog(
+      configs.map((c) => ({
+        id: c.id,
+        name: c.name,
+        description: c.description,
+        connector_type: c.connector?.type ?? 'unknown',
+        tool_count: c.toolCount,
+      })),
+    )
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    engine.buildSystemPrompt(promptData as any, activeTemplateId, {
+      config_catalog: catalog,
+    })
+  }, [activeTemplateId, configs])
 
   useEffect(() => {
-    void buildPrompt()
+    buildPrompt()
   }, [buildPrompt])
 
   const send = useCallback(async (content: string) => {
@@ -211,6 +207,7 @@ export function useChat() {
     provider,
     providerPickerOpen,
     activeTemplateId,
+    tokenUsage,
 
     // Actions
     send,

@@ -56,7 +56,8 @@ export class McpConnector implements IConnector {
 
       // Unwrap the MCP CallToolResult envelope so the LLM receives the actual
       // content rather than a nested { content: [...], isError: bool } blob.
-      const texts = result.content
+      const content = result.content as Array<{ type: string; text?: string }>;
+      const texts = content
         .filter((c): c is { type: "text"; text: string } => c.type === "text")
         .map((c) => c.text);
 

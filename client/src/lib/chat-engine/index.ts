@@ -15,7 +15,7 @@ import type {
 } from './types'
 
 export type { ProviderConfig, ChatMessage, ChatEngineCallbacks, ToolExecutor, PromptFile }
-export type { ToolCallRequest, ToolCallResult, OpenAITool, PromptLayer, PromptTemplate } from './types'
+export type { ProviderName, ToolCallRequest, ToolCallResult, OpenAITool, PromptLayer, PromptTemplate, TokenUsage } from './types'
 export { PROVIDER_DEFAULTS } from './types'
 export { buildConfigCatalog, composeSystemPrompt } from './prompt-loader'
 
@@ -28,13 +28,22 @@ export class ChatEngine {
   private abortController: AbortController | null = null
   private systemPrompt: string = ''
   private isRunning = false
+  private llmConfig: ProviderConfig
+  private executor: ToolExecutor
+  private callbacks: ChatEngineCallbacks
+  private options: ChatEngineOptions
 
   constructor(
-    private llmConfig: ProviderConfig,
-    private executor: ToolExecutor,
-    private callbacks: ChatEngineCallbacks,
-    private options: ChatEngineOptions = {},
-  ) {}
+    llmConfig: ProviderConfig,
+    executor: ToolExecutor,
+    callbacks: ChatEngineCallbacks,
+    options: ChatEngineOptions = {},
+  ) {
+    this.llmConfig = llmConfig
+    this.executor = executor
+    this.callbacks = callbacks
+    this.options = options
+  }
 
   /**
    * Set the system prompt (built from layers + variable injection).

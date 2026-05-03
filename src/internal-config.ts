@@ -11,11 +11,11 @@ export const INTERNAL_CONFIG: McpConfig = {
     {
       name: "create_config",
       description:
-        "Create a new mcp.one config file for any connector type (http, cli, file, grpc, graphql, mcp). The config is hot-reloaded automatically — for GraphQL/gRPC/MCP connectors, pass tools: [] and tools are auto-discovered from the endpoint or proto file.",
+        "Create a new mcp.one config file for any connector type (http, cli, file, grpc, graphql, mcp, sql, mongodb). The config is hot-reloaded automatically — for GraphQL/gRPC/MCP connectors, pass tools: [] and tools are auto-discovered from the endpoint or proto file. For sql/mongodb, each tool must declare a named query or operation.",
       params: [
         { name: "id",          type: "string",  required: true,  description: "Config ID — becomes the filename mcp.{id}.json and the tool namespace prefix" },
         { name: "name",        type: "string",  required: true,  description: "Human-readable name for this config" },
-        { name: "connector",   type: "object",  required: true,  description: "Connector config object. Must include type: 'http'|'cli'|'file'|'grpc'|'graphql'|'mcp' plus type-specific fields (base_url+auth for http, endpoint for grpc/graphql, etc.)" },
+        { name: "connector",   type: "object",  required: true,  description: "Connector config object. Must include type: 'http'|'cli'|'file'|'grpc'|'graphql'|'mcp'|'sql'|'mongodb' plus type-specific fields (base_url+auth for http, endpoint for grpc/graphql, dialect+database for sql, database for mongodb, etc.)" },
         { name: "tools",       type: "array",   required: false, description: "Array of tool definitions. Required for http/cli/file connectors. Omit or pass [] for grpc/graphql/mcp — tools are auto-discovered." },
         { name: "description", type: "string",  required: false, description: "Description shown to the LLM for namespace discovery" },
         { name: "force",       type: "boolean", required: false, description: "Overwrite an existing config with the same id (default: false)" },
@@ -30,8 +30,36 @@ export const INTERNAL_CONFIG: McpConfig = {
     },
     {
       name: "list_configs",
-      description: "List all currently loaded configs with their connector types and tool counts.",
+      description:
+        "**Start here.** Returns the names of all active configs as a flat array. " +
+        "Config IDs follow the pattern `<base>-<connector>` where connector is one of: " +
+        "http, cli, file, grpc, graphql, mcp, sql, mongodb. " +
+        "Use these names to scope `one.search` or `one.list_tools`.",
       params: [],
+    },
+    {
+      name: "search",
+      description:
+        "Find tools by name or intent across all configs (or within a specific one). " +
+        "Returns matching tools with full schemas grouped by match quality: " +
+        "exact name match first, then partial, then description, then related. " +
+        "Indexes both native `one.*` self-management tools and all service tools. " +
+        "Pass config for exact-first matching: 'github-http' returns only github-http tools; " +
+        "'github' matches both github-http and github-cli.",
+      params: [
+        {
+          name: "query",
+          type: "string",
+          required: true,
+          description: "Tool name, intent, or keyword. E.g. 'create_issue', 'send message', 'list repos'",
+        },
+        {
+          name: "config",
+          type: "string",
+          required: false,
+          description: "Config filter — exact match first, then substring. 'github-http' matches only github-http; 'github' matches github-http and github-cli. Omit to search all configs.",
+        },
+      ],
     },
     {
       name: "update_config",
@@ -84,14 +112,20 @@ export const INTERNAL_CONFIG: McpConfig = {
     },
     {
       name: "list_tools",
-      description: "List all tools currently registered across all configs, with their qualified names (config_id.tool_name) and descriptions.",
+      description:
+        "Returns tools with full schemas ready to call. " +
+        "No args: returns only the native `one.*` self-management surface. " +
+        "With config_id: returns all tools in that config. " +
+        "For targeted lookup by name or intent, use `one.search` instead.",
       params: [
-        { name: "config_id", type: "string", required: false, description: "Filter to a specific config (optional)" },
+        { name: "config_id", type: "string", required: false, description: "Config ID to list tools for. Omit to list only native one.* tools." },
       ],
     },
     {
       name: "get_tool",
-      description: "Get the full definition of a specific tool including all params and connector-specific fields.",
+      description:
+        "Returns the full schema for a single tool by qualified name (config_id.tool_name). " +
+        "Use when you already know the tool name.",
       params: [
         { name: "qualified_name", type: "string", required: true, description: "Qualified tool name in format config_id.tool_name (e.g. 'github.create_issue')" },
       ],

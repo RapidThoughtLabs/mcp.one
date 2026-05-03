@@ -12,7 +12,11 @@ import type {
   McpConnectorConfig,
   GraphqlConnectorConfig,
   GrpcConnectorConfig,
+  SqlConnectorConfig,
+  MongoConnectorConfig,
+  SqlDialect,
 } from "./types.js";
+import { extractPlaceholderNames } from "./connectors/sql/lib/rewrite-placeholders.js";
 
 // ── Validation Helpers ─────────────────────────────────────────────
 
@@ -32,7 +36,15 @@ const VALID_AUTH_TYPES = ["bearer", "basic", "api_key", "oauth2_static"] as cons
 const VALID_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 const VALID_PARAM_TYPES = ["string", "number", "boolean", "object", "array"] as const;
 const VALID_PARAM_LOCATIONS = ["body", "path", "query", "header"] as const;
-const VALID_CONNECTOR_TYPES: ConnectorType[] = ["http", "cli", "file", "grpc", "graphql", "mcp", "internal"];
+const VALID_CONNECTOR_TYPES: ConnectorType[] = ["http", "cli", "file", "grpc", "graphql", "mcp", "internal", "sql", "mongodb"];
+const VALID_SQL_DIALECTS: SqlDialect[] = ["postgres", "mysql", "sqlite"];
+const VALID_MONGO_OPERATIONS = [
+  "find", "findOne", "aggregate",
+  "insertOne", "insertMany",
+  "updateOne", "updateMany",
+  "deleteOne", "deleteMany",
+  "countDocuments", "distinct",
+] as const;
 
 function validateAuth(auth: unknown, file: string): AuthConfig {
   if (!auth || typeof auth !== "object") {
@@ -232,6 +244,101 @@ function validateFileTool(tool: unknown, file: string): ToolDef {
   return result;
 }
 
+function validateSqlTool(tool: unknown, file: string): ToolDef {
+  const base = validateBaseTool(tool, file);
+  const t = tool as Record<string, unknown>;
+
+  assertString(t.sql, `tool "${base.name}".sql`, file);
+  const sql = t.sql as string;
+
+  if (sql.includes("{{")) {
+    throw new Error(
+      `[${file}] SQL tool "${base.name}": template interpolation ({{...}}) is not allowed in SQL — use :name placeholders`,
+    );
+  }
+  if (/\$\d+/.test(sql)) {
+    throw new Error(
+      `[${file}] SQL tool "${base.name}": positional $N placeholders are not allowed — use :name placeholders`,
+    );
+  }
+  if (/(?<![a-zA-Z0-9_])\?(?![a-zA-Z0-9_])/.test(sql)) {
+    throw new Error(
+      `[${file}] SQL tool "${base.name}": bare ? placeholders are not allowed — use :name placeholders`,
+    );
+  }
+
+  const sqlNames = new Set(extractPlaceholderNames(sql));
+  const paramNames = new Set(base.params.map((p) => p.name));
+
+  for (const name of sqlNames) {
+    if (!paramNames.has(name)) {
+      throw new Error(
+        `[${file}] SQL tool "${base.name}": placeholder :${name} is not declared in params`,
+      );
+    }
+  }
+
+  if (t.max_rows !== undefined) {
+    if (typeof t.max_rows !== "number" || t.max_rows < 1 || t.max_rows > 10_000) {
+      throw new Error(`[${file}] SQL tool "${base.name}".max_rows must be a number between 1 and 10000`);
+    }
+  }
+  if (t.timeout_ms !== undefined) {
+    if (typeof t.timeout_ms !== "number" || t.timeout_ms < 1 || t.timeout_ms > 120_000) {
+      throw new Error(`[${file}] SQL tool "${base.name}".timeout_ms must be a number between 1 and 120000`);
+    }
+  }
+
+  const result: ToolDef = { ...base, sql };
+  if (t.max_rows !== undefined) result.max_rows = t.max_rows as number;
+  if (t.timeout_ms !== undefined) result.timeout_ms = t.timeout_ms as number;
+  return result;
+}
+
+function validateMongoTool(tool: unknown, file: string): ToolDef {
+  const base = validateBaseTool(tool, file);
+  const t = tool as Record<string, unknown>;
+
+  assertString(t.collection, `tool "${base.name}".collection`, file);
+
+  const op = t.operation as string;
+  if (!VALID_MONGO_OPERATIONS.includes(op as typeof VALID_MONGO_OPERATIONS[number])) {
+    throw new Error(
+      `[${file}] MongoDB tool "${base.name}".operation must be one of: ${VALID_MONGO_OPERATIONS.join(", ")}. Got: ${JSON.stringify(op)}`,
+    );
+  }
+
+  if ((op === "insertOne") && !t.document_template) {
+    throw new Error(`[${file}] MongoDB tool "${base.name}": insertOne requires document_template`);
+  }
+  if ((op === "insertMany") && !t.documents_template) {
+    throw new Error(`[${file}] MongoDB tool "${base.name}": insertMany requires documents_template`);
+  }
+  if ((op === "updateOne" || op === "updateMany") && (!t.filter_template || !t.update_template)) {
+    throw new Error(`[${file}] MongoDB tool "${base.name}": ${op} requires filter_template and update_template`);
+  }
+  if (op === "aggregate" && !t.pipeline_template) {
+    throw new Error(`[${file}] MongoDB tool "${base.name}": aggregate requires pipeline_template`);
+  }
+
+  const result: ToolDef = {
+    ...base,
+    collection: t.collection as string,
+    operation: op as ToolDef["operation"],
+  };
+  if (t.filter_template) result.filter_template = t.filter_template as Record<string, unknown>;
+  if (t.update_template) result.update_template = t.update_template as Record<string, unknown>;
+  if (t.document_template) result.document_template = t.document_template as Record<string, unknown>;
+  if (t.documents_template) result.documents_template = t.documents_template as Array<Record<string, unknown>>;
+  if (t.pipeline_template) result.pipeline_template = t.pipeline_template as Array<Record<string, unknown>>;
+  if (t.projection) result.projection = t.projection as Record<string, 0 | 1>;
+  if (t.sort) result.sort = t.sort as Record<string, 1 | -1>;
+  if (t.max_rows !== undefined) result.max_rows = t.max_rows as number;
+  if (t.timeout_ms !== undefined) result.timeout_ms = t.timeout_ms as number;
+  if (t.limit !== undefined) result.limit = t.limit as number;
+  return result;
+}
+
 function validateToolForConnector(tool: unknown, connectorType: ConnectorType, file: string): ToolDef {
   switch (connectorType) {
     case "http":
@@ -245,6 +352,10 @@ function validateToolForConnector(tool: unknown, connectorType: ConnectorType, f
       return validateBaseTool(tool, file) as ToolDef;
     case "internal":
       return validateBaseTool(tool, file) as ToolDef;
+    case "sql":
+      return validateSqlTool(tool, file);
+    case "mongodb":
+      return validateMongoTool(tool, file);
     default:
       throw new Error(`[${file}] Unknown connector type: ${connectorType}`);
   }
@@ -429,6 +540,93 @@ function validateGrpcConnectorConfig(raw: Record<string, unknown>, file: string)
   return result;
 }
 
+function validateSqlConnectorConfig(raw: Record<string, unknown>, file: string): SqlConnectorConfig {
+  if (!VALID_SQL_DIALECTS.includes(raw.dialect as SqlDialect)) {
+    throw new Error(
+      `[${file}] connector.dialect must be one of: ${VALID_SQL_DIALECTS.join(", ")}. Got: ${JSON.stringify(raw.dialect)}`,
+    );
+  }
+
+  const hasDsn = typeof raw.connection_string_env === "string" && raw.connection_string_env.length > 0;
+  const hasFieldBased = raw.host !== undefined || raw.database !== undefined;
+
+  if (hasDsn && hasFieldBased) {
+    throw new Error(
+      `[${file}] SQL connector: use either connection_string_env OR field-based (host/database), not both`,
+    );
+  }
+  if (!hasDsn && !hasFieldBased && raw.dialect !== "sqlite") {
+    throw new Error(
+      `[${file}] SQL connector: must provide connection_string_env or field-based connection fields`,
+    );
+  }
+  if (raw.dialect === "sqlite" && !hasDsn && !raw.database) {
+    throw new Error(`[${file}] SQLite connector: "database" (file path) is required`);
+  }
+
+  if (raw.default_timeout_ms !== undefined) {
+    if (typeof raw.default_timeout_ms !== "number" || raw.default_timeout_ms > 120_000) {
+      throw new Error(`[${file}] connector.default_timeout_ms must be a number ≤ 120000`);
+    }
+  }
+  if (raw.default_max_rows !== undefined) {
+    if (typeof raw.default_max_rows !== "number" || raw.default_max_rows > 10_000) {
+      throw new Error(`[${file}] connector.default_max_rows must be a number ≤ 10000`);
+    }
+  }
+  if (raw.pool !== undefined && typeof raw.pool === "object" && raw.pool !== null) {
+    const pool = raw.pool as Record<string, unknown>;
+    if (pool.max !== undefined && (typeof pool.max !== "number" || pool.max < 1)) {
+      throw new Error(`[${file}] connector.pool.max must be a positive integer`);
+    }
+    if (pool.idle_ms !== undefined && (typeof pool.idle_ms !== "number" || pool.idle_ms < 0)) {
+      throw new Error(`[${file}] connector.pool.idle_ms must be a non-negative number`);
+    }
+  }
+
+  const result: SqlConnectorConfig = {
+    type: "sql",
+    dialect: raw.dialect as SqlDialect,
+  };
+  if (hasDsn) result.connection_string_env = raw.connection_string_env as string;
+  if (raw.host) result.host = raw.host as string;
+  if (raw.port) result.port = raw.port as number;
+  if (raw.database) result.database = raw.database as string;
+  if (raw.ssl !== undefined) result.ssl = raw.ssl as SqlConnectorConfig["ssl"];
+  if (raw.auth !== undefined) result.auth = validateAuth(raw.auth, file) as SqlConnectorConfig["auth"];
+  if (raw.pool) result.pool = raw.pool as SqlConnectorConfig["pool"];
+  if (raw.default_timeout_ms) result.default_timeout_ms = raw.default_timeout_ms as number;
+  if (raw.default_max_rows) result.default_max_rows = raw.default_max_rows as number;
+  return result;
+}
+
+function validateMongoConnectorConfig(raw: Record<string, unknown>, file: string): MongoConnectorConfig {
+  const hasDsn = typeof raw.connection_string_env === "string" && raw.connection_string_env.length > 0;
+  const hasFieldBased = raw.host !== undefined || raw.database !== undefined;
+
+  if (hasDsn && hasFieldBased) {
+    throw new Error(
+      `[${file}] MongoDB connector: use either connection_string_env OR field-based (host/database), not both`,
+    );
+  }
+  if (!hasDsn && !hasFieldBased) {
+    throw new Error(
+      `[${file}] MongoDB connector: must provide connection_string_env or field-based connection fields`,
+    );
+  }
+
+  const result: MongoConnectorConfig = { type: "mongodb" };
+  if (hasDsn) result.connection_string_env = raw.connection_string_env as string;
+  if (raw.host) result.host = raw.host as string;
+  if (raw.port) result.port = raw.port as number;
+  if (raw.database) result.database = raw.database as string;
+  if (raw.ssl !== undefined) result.ssl = raw.ssl as boolean;
+  if (raw.auth !== undefined) result.auth = validateAuth(raw.auth, file) as MongoConnectorConfig["auth"];
+  if (raw.default_timeout_ms) result.default_timeout_ms = raw.default_timeout_ms as number;
+  if (raw.default_max_rows) result.default_max_rows = raw.default_max_rows as number;
+  return result;
+}
+
 function validateConnectorConfig(raw: unknown, file: string): ConnectorConfig {
   if (!raw || typeof raw !== "object") {
     throw new Error(`[${file}] "connector" must be an object`);
@@ -453,6 +651,10 @@ function validateConnectorConfig(raw: unknown, file: string): ConnectorConfig {
       return c as unknown as ConnectorConfig;
     case "internal":
       return { type: "internal" } as ConnectorConfig;
+    case "sql":
+      return validateSqlConnectorConfig(c, file);
+    case "mongodb":
+      return validateMongoConnectorConfig(c, file);
     default:
       throw new Error(`[${file}] Unknown connector type: ${c.type}`);
   }
@@ -474,6 +676,14 @@ function connectorSummary(connector: ConnectorConfig): string {
     }
     case "internal":
       return "internal";
+    case "sql": {
+      const sql = connector as SqlConnectorConfig;
+      return `${sql.dialect} → ${sql.database ?? "via DSN"}`;
+    }
+    case "mongodb": {
+      const mongo = connector as MongoConnectorConfig;
+      return mongo.database ?? "via DSN";
+    }
     default:
       return connector.type;
   }

@@ -1,26 +1,29 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { Search, RefreshCw, Loader2, PackageSearch, SlidersHorizontal, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { RegistryCard } from './RegistryCard'
-import type { RegistryConfigMeta, RegistryUpdateInfo, RegistrySearchParams } from '@/types/registry'
+import type { RegistryConfigMeta, RegistryUpdateInfo, RegistrySource } from '@/types/registry'
+import type { RegistryFilters } from '@/hooks/useRegistry'
 
 const CONNECTOR_TYPES = ['http', 'cli', 'file', 'grpc', 'graphql', 'mcp'] as const
-const SORT_OPTIONS: { value: RegistrySearchParams['sort_by']; label: string }[] = [
+const SORT_OPTIONS: { value: RegistryFilters['sort_by']; label: string }[] = [
   { value: 'popular', label: 'Most Popular' },
   { value: 'recent', label: 'Most Recent' },
   { value: 'name', label: 'Name A–Z' },
 ]
 
 interface RegistryBrowseProps {
-  configs: RegistryConfigMeta[]
+  results: RegistryConfigMeta[]
   featured: RegistryConfigMeta[]
   loading: boolean
   error: string | null
   total: number
-  searchParams: RegistrySearchParams
-  onSearch: (params: Partial<RegistrySearchParams>) => void
-  onLoadPopular: () => void
-  onLoadRecent: () => void
+  filters: RegistryFilters
+  selectedRegistry: string
+  availableSources: RegistrySource[]
+  onSelectRegistry: (name: string) => void
+  onSetFilter: (patch: Partial<RegistryFilters>) => void
+  onClearFilters: () => void
   onRefetch: () => void
   isInstalled: (slug: string) => boolean
   getUpdateInfo: (slug: string) => RegistryUpdateInfo | undefined
@@ -28,13 +31,17 @@ interface RegistryBrowseProps {
 }
 
 export function RegistryBrowse({
-  configs,
+  results,
   featured,
   loading,
   error,
   total,
-  searchParams,
-  onSearch,
+  filters,
+  selectedRegistry,
+  availableSources,
+  onSelectRegistry,
+  onSetFilter,
+  onClearFilters,
   onRefetch,
   isInstalled,
   getUpdateInfo,
@@ -42,24 +49,36 @@ export function RegistryBrowse({
 }: RegistryBrowseProps) {
   const [searchInput, setSearchInput] = useState('')
   const [showFilters, setShowFilters] = useState(false)
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const hasActiveSearch = !!searchInput.trim() || !!searchParams.connector_type || !!searchParams.verified
+  const hasActiveSearch = !!searchInput.trim() || !!filters.connector_type || !!filters.verified
 
   const handleSearchInput = (value: string) => {
     setSearchInput(value)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => {
-      onSearch({ q: value || undefined })
-    }, 300)
+    onSetFilter({ q: value || undefined })
   }
 
   const clearSearch = () => {
     setSearchInput('')
-    onSearch({ q: undefined, connector_type: undefined, verified: undefined })
+    onClearFilters()
   }
 
-  const displayConfigs = hasActiveSearch ? configs : featured.length > 0 ? featured : configs
+  const gridStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+    gap: 10,
+  } as const
+
+  const sectionLabel = (text: string) => (
+    <div style={{
+      padding: '14px 0 6px',
+      fontSize: 9,
+      letterSpacing: '0.16em',
+      color: 'var(--text-dim)',
+      textTransform: 'uppercase',
+    }}>
+      {text}
+    </div>
+  )
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
@@ -77,6 +96,31 @@ export function RegistryBrowse({
           <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>
             {total} result{total !== 1 ? 's' : ''}
           </span>
+        )}
+        {/* Source picker — shown when multiple sources are configured */}
+        {availableSources.length > 1 && (
+          <select
+            value={selectedRegistry}
+            onChange={(e) => onSelectRegistry(e.target.value)}
+            style={{
+              background: 'transparent',
+              border: '1px solid var(--border)',
+              borderRadius: 4,
+              padding: '2px 8px',
+              color: 'var(--text-dim)',
+              fontSize: 9,
+              fontFamily: "'JetBrains Mono', monospace",
+              cursor: 'pointer',
+              letterSpacing: '0.06em',
+              outline: 'none',
+            }}
+          >
+            {availableSources.map((s) => (
+              <option key={s.name} value={s.name} style={{ background: 'var(--surface)', color: 'var(--text)' }}>
+                {s.name}
+              </option>
+            ))}
+          </select>
         )}
         <Button size="sm" variant="ghost" onClick={() => setShowFilters((v) => !v)} title="Filters">
           <SlidersHorizontal size={11} style={{ color: showFilters ? 'var(--accent)' : undefined }} />
@@ -126,19 +170,18 @@ export function RegistryBrowse({
           borderBottom: '1px solid var(--border)', flexShrink: 0,
           display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
         }}>
-          {/* Sort */}
           <span style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
             Sort:
           </span>
           {SORT_OPTIONS.map(({ value, label }) => (
             <button
               key={value}
-              onClick={() => onSearch({ sort_by: value })}
+              onClick={() => onSetFilter({ sort_by: value })}
               style={{
                 fontSize: 9, padding: '3px 10px', borderRadius: 99, cursor: 'pointer',
-                border: `1px solid ${searchParams.sort_by === value ? 'var(--accent)' : 'var(--border2)'}`,
-                background: searchParams.sort_by === value ? 'var(--accent-dim)' : 'transparent',
-                color: searchParams.sort_by === value ? 'var(--accent)' : 'var(--text-dim)',
+                border: `1px solid ${filters.sort_by === value ? 'var(--accent)' : 'var(--border2)'}`,
+                background: filters.sort_by === value ? 'var(--accent-dim)' : 'transparent',
+                color: filters.sort_by === value ? 'var(--accent)' : 'var(--text-dim)',
                 letterSpacing: '0.06em', transition: 'all 0.12s',
               }}
             >
@@ -148,19 +191,18 @@ export function RegistryBrowse({
 
           <div style={{ width: 1, height: 14, background: 'var(--border2)' }} />
 
-          {/* Connector type */}
           <span style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
             Type:
           </span>
           {CONNECTOR_TYPES.map((type) => (
             <button
               key={type}
-              onClick={() => onSearch({ connector_type: searchParams.connector_type === type ? undefined : type })}
+              onClick={() => onSetFilter({ connector_type: filters.connector_type === type ? undefined : type })}
               style={{
                 fontSize: 9, padding: '3px 10px', borderRadius: 99, cursor: 'pointer',
-                border: `1px solid ${searchParams.connector_type === type ? 'var(--accent)' : 'var(--border2)'}`,
-                background: searchParams.connector_type === type ? 'var(--accent-dim)' : 'transparent',
-                color: searchParams.connector_type === type ? 'var(--accent)' : 'var(--text-dim)',
+                border: `1px solid ${filters.connector_type === type ? 'var(--accent)' : 'var(--border2)'}`,
+                background: filters.connector_type === type ? 'var(--accent-dim)' : 'transparent',
+                color: filters.connector_type === type ? 'var(--accent)' : 'var(--text-dim)',
                 letterSpacing: '0.06em', transition: 'all 0.12s',
               }}
             >
@@ -170,14 +212,13 @@ export function RegistryBrowse({
 
           <div style={{ width: 1, height: 14, background: 'var(--border2)' }} />
 
-          {/* Verified toggle */}
           <button
-            onClick={() => onSearch({ verified: searchParams.verified ? undefined : true })}
+            onClick={() => onSetFilter({ verified: filters.verified ? undefined : true })}
             style={{
               fontSize: 9, padding: '3px 10px', borderRadius: 99, cursor: 'pointer',
-              border: `1px solid ${searchParams.verified ? 'var(--accent)' : 'var(--border2)'}`,
-              background: searchParams.verified ? 'var(--accent-dim)' : 'transparent',
-              color: searchParams.verified ? 'var(--accent)' : 'var(--text-dim)',
+              border: `1px solid ${filters.verified ? 'var(--accent)' : 'var(--border2)'}`,
+              background: filters.verified ? 'var(--accent-dim)' : 'transparent',
+              color: filters.verified ? 'var(--accent)' : 'var(--text-dim)',
               letterSpacing: '0.06em', transition: 'all 0.12s',
             }}
           >
@@ -200,17 +241,7 @@ export function RegistryBrowse({
         </div>
       )}
 
-      {/* Section label */}
-      {!hasActiveSearch && (
-        <div style={{
-          padding: '14px 16px 6px', flexShrink: 0,
-          fontSize: 9, letterSpacing: '0.16em', color: 'var(--text-dim)', textTransform: 'uppercase',
-        }}>
-          Featured
-        </div>
-      )}
-
-      {/* Results grid */}
+      {/* Main content */}
       <div style={{ flex: 1, overflowY: 'auto', padding: 16 }}>
         {error ? (
           <div style={{
@@ -222,41 +253,61 @@ export function RegistryBrowse({
             <span style={{ fontSize: 10, color: 'var(--text-dim)', textAlign: 'center' }}>{error}</span>
             <Button size="sm" variant="ghost" onClick={onRefetch}>Retry</Button>
           </div>
-        ) : loading && displayConfigs.length === 0 ? (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', gap: 10, padding: '60px 20px', color: 'var(--text-dim)',
-          }}>
-            <Loader2 size={28} style={{ opacity: 0.3, animation: 'spin 1s linear infinite' }} />
-            <span style={{ fontSize: 10, letterSpacing: '0.06em' }}>Loading registry…</span>
-          </div>
-        ) : displayConfigs.length === 0 ? (
-          <div style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center',
-            justifyContent: 'center', gap: 12, padding: '60px 20px', color: 'var(--text-dim)',
-          }}>
-            <PackageSearch size={28} style={{ opacity: 0.2 }} />
-            <span style={{ fontSize: 11, letterSpacing: '0.04em' }}>No configs found</span>
-            {hasActiveSearch && (
-              <Button size="sm" variant="ghost" onClick={clearSearch}>Clear search</Button>
-            )}
-          </div>
         ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-            gap: 10,
-          }}>
-            {displayConfigs.map((cfg) => (
-              <RegistryCard
-                key={cfg.id ?? `${cfg.namespace}/${cfg.slug}`}
-                config={cfg}
-                isInstalled={isInstalled(cfg.slug)}
-                updateInfo={getUpdateInfo(cfg.slug)}
-                onClick={() => onSelect(cfg)}
-              />
-            ))}
-          </div>
+          <>
+            {/* Featured section — hidden while searching */}
+            {!hasActiveSearch && featured.length > 0 && (
+              <>
+                {sectionLabel('Featured')}
+                <div style={{ ...gridStyle, marginBottom: 24 }}>
+                  {featured.map((cfg) => (
+                    <RegistryCard
+                      key={cfg.id ?? `${cfg.namespace}/${cfg.slug}`}
+                      config={cfg}
+                      isInstalled={isInstalled(cfg.slug)}
+                      updateInfo={getUpdateInfo(cfg.slug)}
+                      onClick={() => onSelect(cfg)}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Results section */}
+            {!hasActiveSearch && sectionLabel('Browse')}
+            {loading && results.length === 0 ? (
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                justifyContent: 'center', gap: 10, padding: '60px 20px', color: 'var(--text-dim)',
+              }}>
+                <Loader2 size={28} style={{ opacity: 0.3, animation: 'spin 1s linear infinite' }} />
+                <span style={{ fontSize: 10, letterSpacing: '0.06em' }}>Loading registry…</span>
+              </div>
+            ) : results.length === 0 ? (
+              <div style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                justifyContent: 'center', gap: 12, padding: '60px 20px', color: 'var(--text-dim)',
+              }}>
+                <PackageSearch size={28} style={{ opacity: 0.2 }} />
+                <span style={{ fontSize: 11, letterSpacing: '0.04em' }}>No configs found</span>
+                {hasActiveSearch && (
+                  <Button size="sm" variant="ghost" onClick={clearSearch}>Clear search</Button>
+                )}
+              </div>
+            ) : (
+              <div style={gridStyle}>
+                {results.map((cfg) => (
+                  <RegistryCard
+                    key={cfg.id ?? `${cfg.namespace}/${cfg.slug}`}
+                    config={cfg}
+                    isInstalled={isInstalled(cfg.slug)}
+                    updateInfo={getUpdateInfo(cfg.slug)}
+                    onClick={() => onSelect(cfg)}
+                  />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

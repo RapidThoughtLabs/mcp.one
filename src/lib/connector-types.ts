@@ -10,7 +10,7 @@
  * which is reserved for mcp.one itself and never appears as a filename suffix.
  */
 
-export const CONNECTOR_TYPES = ["http", "cli", "file", "grpc", "graphql", "mcp"] as const;
+export const CONNECTOR_TYPES = ["http", "cli", "file", "grpc", "graphql", "mcp", "sql", "mongodb"] as const;
 export type ConnectorTypeSuffix = typeof CONNECTOR_TYPES[number];
 
 /**

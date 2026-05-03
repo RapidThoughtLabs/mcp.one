@@ -42,7 +42,9 @@ export type AuthConfig = BearerAuth | BasicAuth | ApiKeyAuth | OAuth2StaticAuth;
 
 // ── Connector Types ────────────────────────────────────────────────
 
-export type ConnectorType = "http" | "cli" | "file" | "grpc" | "graphql" | "mcp" | "internal";
+export type ConnectorType =
+  | "http" | "cli" | "file" | "grpc" | "graphql" | "mcp" | "internal"
+  | "sql" | "mongodb";
 
 // ── Per-Connector Config Shapes ────────────────────────────────────
 
@@ -118,6 +120,44 @@ export interface InternalConnectorConfig {
   type: "internal";
 }
 
+// ── SQL connector ─────────────────────────────────────────────────
+
+export type SqlDialect = "postgres" | "mysql" | "sqlite";
+
+export interface SqlPoolConfig {
+  max?: number;
+  idle_ms?: number;
+  connection_timeout_ms?: number;
+}
+
+export interface SqlConnectorConfig {
+  type: "sql";
+  dialect: SqlDialect;
+  connection_string_env?: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  ssl?: boolean | { rejectUnauthorized?: boolean; ca_path?: string };
+  auth?: BasicAuth;
+  pool?: SqlPoolConfig;
+  default_timeout_ms?: number;
+  default_max_rows?: number;
+}
+
+// ── MongoDB connector ────────────────────────────────────────────
+
+export interface MongoConnectorConfig {
+  type: "mongodb";
+  connection_string_env?: string;
+  host?: string;
+  port?: number;
+  database?: string;
+  ssl?: boolean;
+  auth?: BasicAuth;
+  default_timeout_ms?: number;
+  default_max_rows?: number;
+}
+
 export type ConnectorConfig =
   | HttpConnectorConfig
   | CliConnectorConfig
@@ -125,7 +165,9 @@ export type ConnectorConfig =
   | GrpcConnectorConfig
   | GraphqlConnectorConfig
   | McpConnectorConfig
-  | InternalConnectorConfig;
+  | InternalConnectorConfig
+  | SqlConnectorConfig
+  | MongoConnectorConfig;
 
 // ── Param & Tool Definitions ───────────────────────────────────────
 
@@ -157,7 +199,13 @@ export interface ToolDef {
   output_as?: "text" | "json";
 
   // ── File-specific ──────────────────────────────────────────────
-  operation?: "read" | "write" | "append" | "delete" | "list";
+  operation?:
+    | "read" | "write" | "append" | "delete" | "list"             // file
+    | "find" | "findOne" | "aggregate"                             // mongodb
+    | "insertOne" | "insertMany"
+    | "updateOne" | "updateMany"
+    | "deleteOne" | "deleteMany"
+    | "countDocuments" | "distinct";
   path_template?: string;     // supports {{param}} interpolation
   content_template?: string;
 
@@ -170,6 +218,22 @@ export interface ToolDef {
   variables_template?: Record<string, unknown>;
 
   // ── MCP — no per-tool fields (tools are auto-discovered) ───────
+
+  // ── SQL-specific ────────────────────────────────────────────────
+  sql?: string;               // static SQL with :name placeholders; no {{...}} allowed
+  max_rows?: number;
+  timeout_ms?: number;
+
+  // ── MongoDB-specific ────────────────────────────────────────────
+  collection?: string;
+  filter_template?: Record<string, unknown>;
+  update_template?: Record<string, unknown>;
+  document_template?: Record<string, unknown>;
+  documents_template?: Array<Record<string, unknown>>;
+  pipeline_template?: Array<Record<string, unknown>>;
+  projection?: Record<string, 0 | 1>;
+  sort?: Record<string, 1 | -1>;
+  limit?: number;
 }
 
 // ── Top-Level Config ───────────────────────────────────────────────

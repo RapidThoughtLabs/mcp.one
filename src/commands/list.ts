@@ -2,6 +2,7 @@ import { loadConfigs } from "../loader.js";
 import { loadSystemConfig } from "../system-config.js";
 import { resolveConfigDir } from "../lib/resolve-config-dir.js";
 import { checkAuthEnvVars, getAuthVarStatuses, getConfigAuth, getConfigBaseUrl } from "../lib/check-auth.js";
+import { loadEnvFile } from "../lib/env-writer.js";
 import { loadManifest } from "../registry/auth.js";
 import { bold, green, red, cyan, dim, table } from "../lib/fmt.js";
 import type { McpConfig } from "../types.js";
@@ -112,6 +113,7 @@ function renderDetail(config: McpConfig): void {
 // ── Entry point ───────────────────────────────────────────────────
 
 export async function run(args: string[]): Promise<void> {
+  loadEnvFile();
   const systemConfig = loadSystemConfig(process.cwd());
   const configDir = resolveConfigDir(undefined, systemConfig);
   const configs = loadConfigs(configDir);

@@ -1,10 +1,12 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 // ── Paths ─────────────────────────────────────────────────────────
+// Home-relative so all invocations (CLI, server, any CWD) share one file.
 
-const ENV_PATH    = path.join(process.cwd(), ".env");
-const BACKUP_PATH = path.join(process.cwd(), ".env.backup");
+const ENV_PATH    = path.join(os.homedir(), ".mcp-one.env");
+const BACKUP_PATH = path.join(os.homedir(), ".mcp-one.env.backup");
 const GITIGNORE_PATH = path.join(process.cwd(), ".gitignore");
 
 // ── Internal helpers ──────────────────────────────────────────────

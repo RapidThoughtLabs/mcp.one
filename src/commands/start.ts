@@ -8,6 +8,7 @@ import { checkAuthEnvVars } from "../auth/index.js";
 import { resolveConfigDir } from "../lib/resolve-config-dir.js";
 import { VERSION } from "../lib/version.js";
 import { log } from "../lib/logger.js";
+import { loadEnvFile } from "../lib/env-writer.js";
 import { INTERNAL_CONFIG } from "../internal-config.js";
 import { connectorRegistry } from "../connectors/registry.js";
 import { HttpConnector } from "../connectors/http.js";
@@ -18,6 +19,8 @@ import { GraphqlConnector } from "../connectors/graphql.js";
 import { McpConnector } from "../connectors/mcp.js";
 import { discoverMcpServers } from "../discovery.js";
 import { InternalConnector } from "../connectors/internal.js";
+import { SqlConnector } from "../connectors/sql.js";
+import { MongoConnector } from "../connectors/mongodb.js";
 import type {
   McpConfig,
   HttpConnectorConfig,
@@ -26,6 +29,8 @@ import type {
   McpConnectorConfig,
   GraphqlConnectorConfig,
   GrpcConnectorConfig,
+  SqlConnectorConfig,
+  MongoConnectorConfig,
 } from "../types.js";
 
 function authStatus(config: McpConfig): string {
@@ -54,6 +59,9 @@ export async function run(args: string[]): Promise<void> {
   const portArg = portIndex !== -1 ? parseInt(args[portIndex + 1] ?? "3333", 10) : 3333;
   const port = isNaN(portArg) ? 3333 : portArg;
 
+  // Load .env so auth env vars are available when checking missing credentials.
+  loadEnvFile();
+
   // ── Initialize logger ──────────────────────────────────────────
   log.init({ debug: debugMode });
 
@@ -77,6 +85,8 @@ export async function run(args: string[]): Promise<void> {
   const graphqlConnector  = new GraphqlConnector();
   const grpcConnector     = new GrpcConnector();
   const internalConnector = new InternalConnector();
+  const sqlConnector      = new SqlConnector();
+  const mongoConnector    = new MongoConnector();
   connectorRegistry.register(new HttpConnector());
   connectorRegistry.register(new CliConnector());
   connectorRegistry.register(new FileConnector());
@@ -84,6 +94,8 @@ export async function run(args: string[]): Promise<void> {
   connectorRegistry.register(graphqlConnector);
   connectorRegistry.register(mcpConnector);
   connectorRegistry.register(internalConnector);
+  connectorRegistry.register(sqlConnector);
+  connectorRegistry.register(mongoConnector);
 
   // ── Configure rate limiter ───────────────────────────────────────
 
@@ -138,6 +150,12 @@ export async function run(args: string[]): Promise<void> {
         config.connector as GrpcConnectorConfig,
         config.overlays,
       );
+    }
+    if (config.connector.type === "sql") {
+      sqlConnector.addConfig(config.id, config.connector as SqlConnectorConfig);
+    }
+    if (config.connector.type === "mongodb") {
+      mongoConnector.addConfig(config.id, config.connector as MongoConnectorConfig);
     }
   }
 
@@ -227,6 +245,15 @@ export async function run(args: string[]): Promise<void> {
       }
     } else if (c.connector.type === "internal") {
       log.raw(`    tools: ${c.tools.map((t) => t.name).join(", ")}`);
+    } else if (c.connector.type === "sql") {
+      const sql = c.connector as SqlConnectorConfig;
+      log.raw(`    dialect:  ${sql.dialect}`);
+      log.raw(`    database: ${sql.database ?? "(via DSN)"}`);
+      log.raw(`    tools: ${c.tools.map((t) => t.name).join(", ")}`);
+    } else if (c.connector.type === "mongodb") {
+      const mongo = c.connector as MongoConnectorConfig;
+      log.raw(`    database: ${mongo.database ?? "(via DSN)"}`);
+      log.raw(`    tools: ${c.tools.map((t) => t.name).join(", ")}`);
     } else {
       if (c.tools.length > 0) log.raw(`    tools: ${c.tools.map((t) => t.name).join(", ")}`);
     }
@@ -297,6 +324,7 @@ export async function run(args: string[]): Promise<void> {
   const { registry, notifyToolsChanged } = await startServer(allConfigs, {
     http: httpMode,
     port,
+    configDir,
   });
 
   // ── Bind internal connector with live server context ────────────

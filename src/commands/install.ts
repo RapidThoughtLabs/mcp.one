@@ -17,7 +17,9 @@
 import fs   from "node:fs";
 import path from "node:path";
 import { getConfigMeta, fetchVersionPayload, RegistryError, type ConfigMeta } from "../registry/client.js";
-import { addToManifest, getInstalledEntry } from "../registry/auth.js";
+import { addToManifest, getInstalledEntry, findEntryByBareSlugAndConnector } from "../registry/auth.js";
+import { handleCrossNamespaceConflict } from "./install-conflict.js";
+import { confirm } from "../lib/prompt.js";
 import { loadSystemConfig } from "../system-config.js";
 import { resolveConfigDir } from "../lib/resolve-config-dir.js";
 import { pick } from "../lib/picker.js";
@@ -170,12 +172,15 @@ export async function run(args: string[]): Promise<void> {
   // Parse flags
   const forceIdx    = args.indexOf("--force");
   const force       = forceIdx !== -1;
+  const replaceIdx  = args.indexOf("--replace");
+  const replace     = replaceIdx !== -1;
   const registryIdx = args.indexOf("--registry");
   const registry    = registryIdx !== -1 ? args[registryIdx + 1] : "default";
 
   // Find first positional (non-flag, non-value) arg as the target
   const skipIndices = new Set<number>();
   if (forceIdx !== -1)    skipIndices.add(forceIdx);
+  if (replaceIdx !== -1)  skipIndices.add(replaceIdx);
   if (registryIdx !== -1) { skipIndices.add(registryIdx); skipIndices.add(registryIdx + 1); }
 
   const target = args.find((a, i) => !skipIndices.has(i) && !a.startsWith("--"));
@@ -186,7 +191,8 @@ export async function run(args: string[]): Promise<void> {
       `\n  Examples:` +
       `\n    mcp-one install @rtl/context7-api` +
       `\n    mcp-one install @rtl/github:http` +
-      `\n    mcp-one install @rtl/github:http@1.2.0`,
+      `\n    mcp-one install @rtl/github:http@1.2.0` +
+      `\n  Flags: ${bold("--force")} (reinstall same namespace)  ${bold("--replace")} (replace cross-namespace conflict)`,
     );
     process.exit(1);
   }
@@ -226,6 +232,7 @@ export async function run(args: string[]): Promise<void> {
   const qualifiedSlug     = meta.qualified_slug;
   const resolvedConnector = meta.connector_type;
   const installedId       = `${rawSlug}-${resolvedConnector}`; // D2: compound id
+  const outFile           = path.join(configDir, `mcp.${installedId}.json`); // D1
 
   console.log(`  Config:   ${bold(meta.name)}  ${dim(`(${qualifiedSlug})`)}`);
   console.log(`  Connector: ${dim(meta.connector_type)}`);
@@ -234,16 +241,54 @@ export async function run(args: string[]): Promise<void> {
   }
   console.log();
 
-  // ── Already-installed guard ───────────────────────────────────────
+  // ── Conflict detection ────────────────────────────────────────────
+  // Only block/prompt if manifest says installed AND the config file actually exists.
+  // Manifest-only entries (file deleted or different cwd) are treated as not installed.
 
-  const existing = getInstalledEntry(qualifiedSlug, registry);
-  if (existing && !force) {
+  const sameSlugEntry = getInstalledEntry(qualifiedSlug, registry);
+  const fileEntry     = findEntryByBareSlugAndConnector(rawSlug, resolvedConnector, registry);
+
+  // Case A: same qualified_slug → re-install guard (unchanged behavior)
+  if (sameSlugEntry && !force && fs.existsSync(outFile)) {
     console.error(
       yellow("⚠") +
-      `  "${qualifiedSlug}" is already installed at version ${existing.version}.`,
+      `  "${qualifiedSlug}" is already installed at version ${sameSlugEntry.version}.`,
     );
     console.error(`  Use ${bold("--force")} to reinstall.`);
     process.exit(1);
+  }
+
+  // Case B: file exists, manifest entry from different namespace → cross-namespace conflict
+  if (!sameSlugEntry && fileEntry && fs.existsSync(outFile)) {
+    await handleCrossNamespaceConflict({
+      incoming: meta,
+      existing: fileEntry,
+      outFile,
+      replace,
+      registry,
+    });
+    // on decline: exits. on accept: falls through to download.
+  }
+
+  // Case C: file exists but no manifest entry → unmanaged file (hand-edited or stale)
+  if (!sameSlugEntry && !fileEntry && fs.existsSync(outFile) && !force) {
+    if (!process.stdout.isTTY) {
+      console.error(red("✗") + `  An unmanaged config file already exists at ${outFile}.`);
+      console.error(`  Use ${bold("--force")} to overwrite.`);
+      process.exit(1);
+    }
+    const relPath = outFile.startsWith(process.cwd() + "/")
+      ? outFile.slice(process.cwd().length + 1)
+      : outFile;
+    console.log();
+    console.log(yellow("⚠") + `  An unmanaged config exists at ${bold(relPath)}.`);
+    console.log();
+    const accepted = await confirm("  Overwrite? [y/N] ");
+    if (!accepted) {
+      console.log();
+      console.error(red("✗") + `  Cancelled. Use ${bold("--force")} to overwrite non-interactively.`);
+      process.exit(1);
+    }
   }
 
   // ── Step 2: Download payload ──────────────────────────────────────
@@ -283,7 +328,6 @@ export async function run(args: string[]): Promise<void> {
   payloadObj.id    = installedId;
 
   const payloadJson = JSON.stringify(payloadObj, null, 2);
-  const outFile     = path.join(configDir, `mcp.${installedId}.json`); // D1
 
   try {
     fs.mkdirSync(configDir, { recursive: true });
@@ -294,7 +338,7 @@ export async function run(args: string[]): Promise<void> {
   }
 
   // D3: record qualified slug in manifest
-  addToManifest(qualifiedSlug, resolvedVersion, resolvedConnector, registry);
+  addToManifest(qualifiedSlug, resolvedVersion, resolvedConnector, registry, meta.forked_from ?? null);
 
   // ── Done ──────────────────────────────────────────────────────────
 
@@ -307,7 +351,7 @@ export async function run(args: string[]): Promise<void> {
   console.log(dim(`  File:      ${outFile}`));
   console.log();
 
-  if (existing) {
+  if (sameSlugEntry && force) {
     console.log(dim("  Reinstalled — server will hot-reload it automatically."));
   } else {
     console.log(dim("  Restart or reload mcp-one to activate the new config."));

@@ -9,6 +9,7 @@ import {
 import express from "express";
 import type { McpConfig, RegisteredTool, ParamDef, CallerContext } from "./types.js";
 import { execute } from "./executor.js";
+import { createAdminRouter } from "./admin-api.js";
 
 // ── JSON Schema Generation ────────────────────────────────────────
 
@@ -102,8 +103,13 @@ function makeServer(
 
   // ── tools/list ────────────────────────────────────────────────
 
+  const DISCOVERY_TRIO = new Set(["one.search", "one.list_tools", "one.list_configs"]);
+
   server.setRequestHandler(ListToolsRequestSchema, () => {
-    const tools = registry.list().map((rt) => ({
+    const visible = registry.list().filter((rt) =>
+      DISCOVERY_TRIO.has(`${rt.configId}.${rt.tool.name}`),
+    );
+    const tools = visible.map((rt) => ({
       name: `${rt.configId}.${rt.tool.name}`,
       description: `[${rt.configId}] ${rt.tool.description}`,
       inputSchema: buildInputSchema(rt.tool.params),
@@ -180,6 +186,8 @@ export interface StartServerOptions {
   /** Also bind an HTTP transport on `port` (default 3333). */
   http?: boolean;
   port?: number;
+  /** Config directory — mounts /admin/configs/* REST API when http is true. */
+  configDir?: string;
 }
 
 // ── startServer ───────────────────────────────────────────────────
@@ -239,6 +247,14 @@ export async function startServer(
         transport: "http+stdio",
       });
     });
+
+    // ── Admin REST API ──────────────────────────────────────────────
+    // Console config CRUD — humans editing JSON. Full replace-style PUT.
+    // Separate from the MCP tools (one.*) which are narrow/additive for LLMs.
+    if (options.configDir) {
+      app.use("/admin", createAdminRouter({ configDir: options.configDir, registry }));
+      console.error(`[mcp-one] admin  ready — http://localhost:${port}/admin/configs`);
+    }
 
     // ── MCP streamable-HTTP endpoint ─────────────────────────────
     // Stateless mode: the SDK transport can only handle ONE request per

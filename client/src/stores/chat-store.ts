@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ChatMessage, ProviderConfig, ToolCallResult, ToolCallRequest } from '@/lib/chat-engine'
+import type { ChatMessage, ProviderConfig, ToolCallResult, ToolCallRequest, TokenUsage } from '@/lib/chat-engine'
 
 interface ChatState {
   // ── Provider ──────────────────────────────────────────────────
@@ -25,6 +25,10 @@ interface ChatState {
 
   // ── Model swap (no re-auth) ───────────────────────────────────
   setProviderModel: (model: string) => void
+
+  // ── Token usage ───────────────────────────────────────────────
+  tokenUsage: TokenUsage
+  addUsage: (delta: TokenUsage) => void
 
   // ── Streaming ─────────────────────────────────────────────────
   isStreaming: boolean
@@ -100,7 +104,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
       ),
     })),
 
-  clearMessages: () => set({ messages: [] }),
+  clearMessages: () => set({ messages: [], tokenUsage: { input: 0, output: 0, total: 0 } }),
+
+  // Token usage
+  tokenUsage: { input: 0, output: 0, total: 0 },
+
+  addUsage: (delta) =>
+    set((s) => ({
+      tokenUsage: {
+        input: s.tokenUsage.input + delta.input,
+        output: s.tokenUsage.output + delta.output,
+        total: s.tokenUsage.total + delta.total,
+      },
+    })),
 
   setProviderModel: (model) => {
     const { provider } = get()

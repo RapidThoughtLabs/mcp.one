@@ -9,12 +9,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { validateConfig } from "../../loader.js";
-import { loadManifest } from "../../registry/auth.js";
-import { CONNECTOR_TYPES, extractBaseAndConnector, type ConnectorTypeSuffix } from "../../lib/connector-types.js";
+import { CONNECTOR_TYPES, type ConnectorTypeSuffix } from "../../lib/connector-types.js";
+import { RESERVED_IDS, validateBaseId, compoundId } from "../../lib/config-rules.js";
 import type { ConnectorResult } from "../base.js";
 import type { InternalContext } from "../internal.js";
 
-const SELF_ID = "one"; // the id of mcp.one.json — protected from deletion/overwrite
+const SELF_ID = RESERVED_IDS[0]!; // "one" — protected from deletion/overwrite
 
 function configFilePath(configDir: string, id: string): string {
   return path.join(configDir, `mcp.${id}.json`);
@@ -36,29 +36,12 @@ export async function handleCreateConfig(
   ctx: InternalContext,
   args: Record<string, unknown>,
 ): Promise<ConnectorResult> {
-  const id = args.id as string | undefined;
-
-  if (!id || typeof id !== "string" || id.trim() === "") {
-    return { success: false, data: { error: "id is required and must be a non-empty string" } };
+  const idError = validateBaseId(args.id);
+  if (idError) {
+    return { success: false, data: { error: idError } };
   }
+  const id = args.id as string;
 
-  if (id === SELF_ID) {
-    return { success: false, data: { error: `Cannot create a config with id "${SELF_ID}" — reserved for mcp.one self-management` } };
-  }
-
-  // D9: id must be a BASE id — reject if it already includes a connector type suffix
-  for (const ct of CONNECTOR_TYPES) {
-    if (id.endsWith(`-${ct}`)) {
-      return {
-        success: false,
-        data: {
-          error: `id "${id}" already includes the connector suffix "-${ct}". Pass the base id (e.g. "${id.slice(0, -(ct.length + 1))}") — the suffix is added automatically from connector.type.`,
-        },
-      };
-    }
-  }
-
-  // Derive connector type from the connector arg (D1: filename includes connector type)
   const connector = args.connector as Record<string, unknown> | undefined;
   const connectorType = (connector?.type as string | undefined) ?? "";
 
@@ -71,23 +54,22 @@ export async function handleCreateConfig(
     };
   }
 
-  // D1: compound id and filename
-  const compoundId = `${id}-${connectorType}`;
-  const filePath   = configFilePath(ctx.configDir, compoundId);
+  const cId      = compoundId(id, connectorType);
+  const filePath = configFilePath(ctx.configDir, cId);
 
   if (fs.existsSync(filePath) && !args.force) {
     return {
       success: false,
       data: {
         // D9 error message format
-        error: `Config '${id}' (${connectorType}) already exists as mcp.${compoundId}.json. Pass force: true to overwrite.`,
+        error: `Config '${id}' (${connectorType}) already exists as mcp.${cId}.json. Pass force: true to overwrite.`,
       },
     };
   }
 
   // D2: id field in the stored JSON is the compound form
   const rawConfig: Record<string, unknown> = {
-    id:        compoundId,
+    id:        cId,
     name:      args.name ?? id,
     connector: args.connector ?? {},
     tools:     args.tools ?? [],
@@ -97,7 +79,7 @@ export async function handleCreateConfig(
 
   // Dry-run validation before writing
   try {
-    validateConfig(rawConfig, `mcp.${compoundId}.json`);
+    validateConfig(rawConfig, `mcp.${cId}.json`);
   } catch (err) {
     return { success: false, data: { error: `Validation failed: ${(err as Error).message}` } };
   }
@@ -109,9 +91,9 @@ export async function handleCreateConfig(
   return {
     success: true,
     data: {
-      id:        compoundId,
+      id:        cId,
       file_path: filePath,
-      message:   `Config "${compoundId}" created. The server will hot-reload it automatically.`,
+      message:   `Config "${cId}" created. The server will hot-reload it automatically.`,
     },
   };
 }
@@ -137,71 +119,8 @@ export async function handleListConfigs(
   ctx: InternalContext,
   _args: Record<string, unknown>,
 ): Promise<ConnectorResult> {
-  // Tool counts keyed by compound config id
-  const toolsByConfig = new Map<string, number>();
-  for (const rt of ctx.registry.list()) {
-    toolsByConfig.set(rt.configId, (toolsByConfig.get(rt.configId) ?? 0) + 1);
-  }
-
-  // Build compound-id → qualified_slug map from the manifest (D3)
-  const { installed } = loadManifest();
-  const qualifiedSlugById = new Map<string, string>();
-  for (const e of installed) {
-    // Derive compound id from qualified slug: "@ruchit/github:cli" → "github-cli"
-    const withoutNs   = e.slug.replace(/^@[^/]+\//, "");          // "github:cli"
-    const colonIdx    = withoutNs.indexOf(":");
-    if (colonIdx !== -1) {
-      const base = withoutNs.slice(0, colonIdx);
-      const ct   = withoutNs.slice(colonIdx + 1);
-      qualifiedSlugById.set(`${base}-${ct}`, e.slug);
-    }
-  }
-
-  // D11: group configs by base slug (strips -{connector_type} suffix)
-  const grouped: Record<string, {
-    variants: Array<{
-      qualified_slug?: string;
-      id: string;
-      connector_type: string;
-      tool_count: number;
-      name: string;
-      description?: string;
-      file: string;
-    }>;
-  }> = {};
-
-  if (fs.existsSync(ctx.configDir)) {
-    const files = fs.readdirSync(ctx.configDir)
-      .filter((f) => f.startsWith("mcp.") && f.endsWith(".json"));
-
-    for (const file of files) {
-      try {
-        const raw = JSON.parse(
-          fs.readFileSync(path.join(ctx.configDir, file), "utf-8"),
-        ) as Record<string, unknown>;
-
-        const id            = raw.id as string;
-        const connector     = raw.connector as Record<string, unknown>;
-        const connectorType = (connector?.type as string | undefined) ?? "unknown";
-        const { base }      = extractBaseAndConnector(id);
-
-        const variant = {
-          ...(qualifiedSlugById.has(id) ? { qualified_slug: qualifiedSlugById.get(id) } : {}),
-          id,
-          connector_type: connectorType,
-          tool_count:     toolsByConfig.get(id) ?? 0,
-          name:           raw.name as string,
-          ...(raw.description ? { description: raw.description as string } : {}),
-          file,
-        };
-
-        if (!grouped[base]) grouped[base] = { variants: [] };
-        grouped[base].variants.push(variant);
-      } catch { /* skip malformed files */ }
-    }
-  }
-
-  return { success: true, data: grouped };
+  const configs = [...new Set(ctx.registry.list().map((rt) => rt.configId))].sort();
+  return { success: true, data: { configs } };
 }
 
 export async function handleUpdateConfig(

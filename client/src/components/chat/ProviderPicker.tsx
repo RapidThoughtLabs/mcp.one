@@ -13,7 +13,7 @@ interface ProviderPickerProps {
 }
 
 export function ProviderPicker({ open, onClose, onSave, current }: ProviderPickerProps) {
-  const { getModels, customModels, selectedModel, setSelectedModel } = useLlmStore()
+  const { customModels, selectedModel, setSelectedModel } = useLlmStore()
 
   const initialProvider: ProviderName = current?.provider ?? 'openai'
   const [provider, setProvider] = useState<ProviderName>(initialProvider)
@@ -26,7 +26,6 @@ export function ProviderPicker({ open, onClose, onSave, current }: ProviderPicke
   if (!open) return null
 
   const defaults = PROVIDER_DEFAULTS[provider]
-  const allModels = getModels(provider)
   const builtInModels = PROVIDER_DEFAULTS[provider].models
   const customList = customModels[provider]
 

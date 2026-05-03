@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import {
-  ArrowLeft, Globe, Terminal, FileText, Cpu, Network, Server,
+  ArrowLeft, Globe, Terminal, FileText, Cpu, Network, Server, Database,
   ShieldCheck, ShieldAlert, Package, Tag, Calendar, Code2,
   ChevronDown, ChevronRight, Loader2, AlertCircle,
 } from 'lucide-react'
@@ -20,19 +20,27 @@ function connectorIcon(type: string) {
     case 'grpc': return <Cpu size={size} style={style} />
     case 'graphql': return <Network size={size} style={style} />
     case 'mcp': return <Server size={size} style={style} />
+    case 'sql': return <Database size={size} style={style} />
     default: return <Globe size={size} style={style} />
   }
 }
 
 function connectorLabel(type: string): string {
   const map: Record<string, string> = {
-    http: 'HTTP', cli: 'CLI', file: 'File', grpc: 'gRPC', graphql: 'GraphQL', mcp: 'MCP',
+    http: 'HTTP', cli: 'CLI', file: 'File', grpc: 'gRPC', graphql: 'GraphQL', mcp: 'MCP', sql: 'SQL',
   }
   return map[type] ?? type
 }
 
 function connectorUrl(cfg: ConfigSummary): string {
-  return cfg.connector.base_url ?? cfg.connector.endpoint ?? cfg.connector.transport ?? cfg.connector.type
+  const c = cfg.connector
+  if (c.type === 'sql') {
+    if (c.connection_string_env) return `env:${String(c.connection_string_env)}`
+    if (c.host) return `${String(c.dialect)}://${String(c.host)}:${String(c.port ?? '?')}/${String(c.database ?? '')}`
+    if (c.database) return `${String(c.dialect)}:${String(c.database)}`
+    return String(c.type)
+  }
+  return (c.base_url ?? c.endpoint ?? c.transport ?? c.type) as string
 }
 
 function fmtDate(iso: string): string {
@@ -138,7 +146,7 @@ function ToolRow({ tool }: { tool: McpTool }) {
                   <span style={{ fontSize: 9, color: 'var(--accent)', letterSpacing: '0.04em' }}>
                     {String(def.type ?? 'any')}
                   </span>
-                  {def.description && (
+                  {!!def.description && (
                     <span style={{ fontSize: 9, color: 'var(--text-dim)', flex: 1 }}>
                       — {String(def.description)}
                     </span>

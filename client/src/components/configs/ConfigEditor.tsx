@@ -1,11 +1,11 @@
 import { useState, useCallback, useMemo } from 'react'
 import {
-  X, Save, Trash2, RotateCcw, Loader2, AlertTriangle,
+  X, Save, Trash2, RotateCcw, Loader2, AlertTriangle, Info,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { AuthFormSection, type AuthFields, DEFAULT_AUTH_FIELDS } from './AuthFormSection'
-import { ToolBuilder, type ToolRow, newTool } from './ToolBuilder'
+import { ToolBuilder, type ToolRow } from './ToolBuilder'
 import { JsonPreview } from './JsonPreview'
 import { DiffPopup } from './DiffPopup'
 import type { ParamRow } from './ParamBuilder'
@@ -15,7 +15,7 @@ import type { ConfigSummary } from '@/types/server'
 
 // ── State shape (mirrors ConfigDesigner's) ──────────────────────────
 
-type ConnectorType = 'http' | 'cli' | 'file' | 'grpc' | 'graphql' | 'mcp'
+type ConnectorType = 'http' | 'cli' | 'file' | 'grpc' | 'graphql' | 'mcp' | 'sql'
 
 interface EditorState {
   name: string
@@ -34,6 +34,18 @@ interface EditorState {
   mcpCommand: string
   mcpArgs: string
   mcpUrl: string
+  sqlDialect: 'postgres' | 'mysql' | 'sqlite'
+  sqlConnMode: 'dsn' | 'fields'
+  sqlConnectionStringEnv: string
+  sqlHost: string
+  sqlPort: string
+  sqlDatabase: string
+  sqlSsl: boolean
+  sqlPoolMax: string
+  sqlIdleMs: string
+  sqlConnectionTimeoutMs: string
+  sqlDefaultTimeoutMs: string
+  sqlDefaultMaxRows: string
   auth: AuthFields
   tools: ToolRow[]
 }
@@ -102,6 +114,9 @@ function parseToolRow(t: Record<string, unknown>): ToolRow {
     service: (t.service as string) || '',
     rpc_method: (t.rpc_method as string) || '',
     query: (t.query as string) || '',
+    sql: (t.sql as string) || '',
+    maxRowsStr: t.max_rows != null ? String(t.max_rows) : '',
+    timeoutMsStr: t.timeout_ms != null ? String(t.timeout_ms) : '',
     params,
   }
 }
@@ -115,6 +130,7 @@ function parseRawConfig(raw: Record<string, unknown>): EditorState {
     ? (raw.tools as Record<string, unknown>[]).map(parseToolRow)
     : []
 
+  const sqlPool = (connector.pool as Record<string, unknown> | undefined) ?? {}
   return {
     name: (raw.name as string) || '',
     description: (raw.description as string) || '',
@@ -132,6 +148,18 @@ function parseRawConfig(raw: Record<string, unknown>): EditorState {
     mcpCommand: (connector.command as string) || '',
     mcpArgs: Array.isArray(connector.args) ? (connector.args as string[]).join(' ') : '',
     mcpUrl: (connector.url as string) || '',
+    sqlDialect: (connector.dialect as 'postgres' | 'mysql' | 'sqlite') ?? 'postgres',
+    sqlConnMode: connector.connection_string_env ? 'dsn' : 'fields',
+    sqlConnectionStringEnv: (connector.connection_string_env as string) || '',
+    sqlHost: (connector.host as string) || '',
+    sqlPort: connector.port != null ? String(connector.port) : '',
+    sqlDatabase: (connector.database as string) || '',
+    sqlSsl: Boolean(connector.ssl),
+    sqlPoolMax: sqlPool.max != null ? String(sqlPool.max) : '',
+    sqlIdleMs: sqlPool.idle_ms != null ? String(sqlPool.idle_ms) : '',
+    sqlConnectionTimeoutMs: sqlPool.connection_timeout_ms != null ? String(sqlPool.connection_timeout_ms) : '',
+    sqlDefaultTimeoutMs: connector.default_timeout_ms != null ? String(connector.default_timeout_ms) : '',
+    sqlDefaultMaxRows: connector.default_max_rows != null ? String(connector.default_max_rows) : '',
     auth: parseAuthFields(auth),
     tools,
   }
@@ -196,6 +224,28 @@ function buildConnector(s: EditorState): Record<string, unknown> {
       }
       return conn
     }
+    case 'sql': {
+      const conn: Record<string, unknown> = { type: 'sql', dialect: s.sqlDialect }
+      if (s.sqlDialect === 'sqlite') {
+        conn.database = s.sqlDatabase
+      } else if (s.sqlConnMode === 'dsn') {
+        conn.connection_string_env = s.sqlConnectionStringEnv
+      } else {
+        conn.host = s.sqlHost
+        conn.port = parseInt(s.sqlPort, 10) || undefined
+        conn.database = s.sqlDatabase
+        if (s.auth.authType === 'basic') conn.auth = buildAuth(s.auth)
+      }
+      if (s.sqlSsl && s.sqlDialect !== 'sqlite') conn.ssl = true
+      const pool: Record<string, unknown> = {}
+      if (s.sqlPoolMax) pool.max = parseInt(s.sqlPoolMax, 10)
+      if (s.sqlIdleMs) pool.idle_ms = parseInt(s.sqlIdleMs, 10)
+      if (s.sqlConnectionTimeoutMs) pool.connection_timeout_ms = parseInt(s.sqlConnectionTimeoutMs, 10)
+      if (Object.keys(pool).length > 0) conn.pool = pool
+      if (s.sqlDefaultTimeoutMs) conn.default_timeout_ms = parseInt(s.sqlDefaultTimeoutMs, 10)
+      if (s.sqlDefaultMaxRows) conn.default_max_rows = parseInt(s.sqlDefaultMaxRows, 10)
+      return conn
+    }
   }
 }
 
@@ -220,6 +270,9 @@ function buildTool(t: ToolRow): Record<string, unknown> {
   if (t.service) tool.service = t.service
   if (t.rpc_method) tool.rpc_method = t.rpc_method
   if (t.query) tool.query = t.query
+  if (t.sql) tool.sql = t.sql
+  if (t.maxRowsStr) tool.max_rows = parseInt(t.maxRowsStr, 10)
+  if (t.timeoutMsStr) tool.timeout_ms = parseInt(t.timeoutMsStr, 10)
   return tool
 }
 
@@ -350,7 +403,8 @@ export function ConfigEditor({ config, updateConfig, deleteConfig, onClose }: Co
   }
 
   const ct = state.connectorType
-  const hasAuth = ct === 'http' || ct === 'graphql'
+  const sqlNeedsAuth = ct === 'sql' && state.sqlDialect !== 'sqlite' && state.sqlConnMode === 'fields'
+  const hasAuth = ct === 'http' || ct === 'graphql' || sqlNeedsAuth
   const hasTools = ct !== 'mcp'
 
   return (
@@ -522,15 +576,141 @@ export function ConfigEditor({ config, updateConfig, deleteConfig, onClose }: Co
               )}
             </div>
           )}
+          {ct === 'sql' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <FieldGroup label="DIALECT">
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {(['postgres', 'mysql', 'sqlite'] as const).map((d) => (
+                    <label key={d} style={{
+                      display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+                      borderRadius: 5, cursor: 'pointer',
+                      background: state.sqlDialect === d ? 'var(--accent-dim)' : 'var(--surface2)',
+                      border: `1px solid ${state.sqlDialect === d ? 'var(--accent)' : 'var(--border)'}`,
+                    }}>
+                      <input type="radio" name="sqlDialect" value={d} checked={state.sqlDialect === d}
+                        onChange={() => set({ sqlDialect: d, sqlConnMode: 'dsn' })} style={{ accentColor: 'var(--accent)' }} />
+                      <span style={{ fontSize: 11, color: 'var(--text)', fontWeight: 600 }}>{d}</span>
+                    </label>
+                  ))}
+                </div>
+              </FieldGroup>
+              {state.sqlDialect !== 'sqlite' && (
+                <FieldGroup label="CONNECTION MODE">
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {([['dsn', 'Connection string'], ['fields', 'Host & port']] as const).map(([v, lbl]) => (
+                      <label key={v} style={{
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px',
+                        borderRadius: 5, cursor: 'pointer',
+                        background: state.sqlConnMode === v ? 'var(--accent-dim)' : 'var(--surface2)',
+                        border: `1px solid ${state.sqlConnMode === v ? 'var(--accent)' : 'var(--border)'}`,
+                      }}>
+                        <input type="radio" name="sqlConnMode" value={v} checked={state.sqlConnMode === v}
+                          onChange={() => set({ sqlConnMode: v })} style={{ accentColor: 'var(--accent)' }} />
+                        <span style={{ fontSize: 11, color: 'var(--text)', fontWeight: 600 }}>{lbl}</span>
+                      </label>
+                    ))}
+                  </div>
+                </FieldGroup>
+              )}
+              {state.sqlDialect === 'sqlite' && (
+                <FieldGroup label="DATABASE FILE PATH">
+                  <input style={inputCss(state.sqlDatabase !== initial.sqlDatabase)} value={state.sqlDatabase}
+                    onChange={(e) => set({ sqlDatabase: e.target.value })} placeholder="/path/to/db.sqlite" />
+                </FieldGroup>
+              )}
+              {state.sqlDialect !== 'sqlite' && state.sqlConnMode === 'dsn' && (
+                <FieldGroup label="CONNECTION STRING ENV" hint="Name of the env var holding the full DSN">
+                  <input style={inputCss(state.sqlConnectionStringEnv !== initial.sqlConnectionStringEnv)}
+                    value={state.sqlConnectionStringEnv}
+                    onChange={(e) => set({ sqlConnectionStringEnv: e.target.value })} placeholder="DATABASE_URL" />
+                </FieldGroup>
+              )}
+              {state.sqlDialect !== 'sqlite' && state.sqlConnMode === 'fields' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 10 }}>
+                    <FieldGroup label="HOST">
+                      <input style={inputCss(state.sqlHost !== initial.sqlHost)} value={state.sqlHost}
+                        onChange={(e) => set({ sqlHost: e.target.value })} placeholder="localhost" />
+                    </FieldGroup>
+                    <FieldGroup label="PORT">
+                      <input type="number" style={inputCss(state.sqlPort !== initial.sqlPort)} value={state.sqlPort}
+                        onChange={(e) => set({ sqlPort: e.target.value })}
+                        placeholder={state.sqlDialect === 'mysql' ? '3306' : '5432'} />
+                    </FieldGroup>
+                  </div>
+                  <FieldGroup label="DATABASE">
+                    <input style={inputCss(state.sqlDatabase !== initial.sqlDatabase)} value={state.sqlDatabase}
+                      onChange={(e) => set({ sqlDatabase: e.target.value })} placeholder="myapp" />
+                  </FieldGroup>
+                </div>
+              )}
+              {state.sqlDialect !== 'sqlite' && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+                  <input type="checkbox" checked={state.sqlSsl} onChange={(e) => set({ sqlSsl: e.target.checked })} style={{ accentColor: 'var(--accent)' }} />
+                  <span style={{ fontSize: 11, color: state.sqlSsl !== initial.sqlSsl ? 'var(--accent)' : 'var(--text)' }}>Enable SSL</span>
+                </label>
+              )}
+              <details style={{ border: '1px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+                <summary style={{ padding: '7px 12px', cursor: 'pointer', fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.05em', background: 'var(--surface2)', userSelect: 'none' }}>
+                  Advanced (pool & timeouts)
+                </summary>
+                <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                    <FieldGroup label="POOL MAX">
+                      <input type="number" style={inputCss(state.sqlPoolMax !== initial.sqlPoolMax)} value={state.sqlPoolMax}
+                        onChange={(e) => set({ sqlPoolMax: e.target.value })} placeholder="10" />
+                    </FieldGroup>
+                    <FieldGroup label="IDLE (ms)">
+                      <input type="number" style={inputCss(state.sqlIdleMs !== initial.sqlIdleMs)} value={state.sqlIdleMs}
+                        onChange={(e) => set({ sqlIdleMs: e.target.value })} placeholder="30000" />
+                    </FieldGroup>
+                    <FieldGroup label="CONN TIMEOUT (ms)">
+                      <input type="number" style={inputCss(state.sqlConnectionTimeoutMs !== initial.sqlConnectionTimeoutMs)} value={state.sqlConnectionTimeoutMs}
+                        onChange={(e) => set({ sqlConnectionTimeoutMs: e.target.value })} placeholder="10000" />
+                    </FieldGroup>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                    <FieldGroup label="DEFAULT TIMEOUT (ms)">
+                      <input type="number" style={inputCss(state.sqlDefaultTimeoutMs !== initial.sqlDefaultTimeoutMs)} value={state.sqlDefaultTimeoutMs}
+                        onChange={(e) => set({ sqlDefaultTimeoutMs: e.target.value })} placeholder="30000" />
+                    </FieldGroup>
+                    <FieldGroup label="DEFAULT MAX ROWS">
+                      <input type="number" style={inputCss(state.sqlDefaultMaxRows !== initial.sqlDefaultMaxRows)} value={state.sqlDefaultMaxRows}
+                        onChange={(e) => set({ sqlDefaultMaxRows: e.target.value })} placeholder="1000" />
+                    </FieldGroup>
+                  </div>
+                </div>
+              </details>
+            </div>
+          )}
         </Section>
 
         {/* ── Auth ── */}
-        {hasAuth && (
+        {(hasAuth || (ct === 'sql' && !sqlNeedsAuth)) && (
           <Section title="Auth Setup">
-            <AuthFormSection
-              fields={state.auth}
-              onChange={(auth) => set({ auth })}
-            />
+            {ct === 'sql' && state.sqlDialect === 'sqlite' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6 }}>
+                <Info size={13} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5 }}>SQLite uses a local file — no credentials needed.</span>
+              </div>
+            ) : ct === 'sql' && state.sqlConnMode === 'dsn' ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 6 }}>
+                <Info size={13} style={{ color: 'var(--text-dim)', flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5 }}>Credentials are embedded in the connection string env var.</span>
+              </div>
+            ) : ct === 'sql' ? (
+              <AuthFormSection
+                fields={{ ...state.auth, authType: 'basic' }}
+                onChange={(auth) => set({ auth })}
+                lockedType="basic"
+                labels={{ usernameEnv: 'DB USERNAME ENV VAR *', tokenEnv: 'DB PASSWORD ENV VAR *' }}
+              />
+            ) : (
+              <AuthFormSection
+                fields={state.auth}
+                onChange={(auth) => set({ auth })}
+              />
+            )}
           </Section>
         )}
 

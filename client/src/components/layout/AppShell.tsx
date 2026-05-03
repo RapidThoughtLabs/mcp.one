@@ -7,32 +7,7 @@ import { LogsView } from '@/components/logs/LogsView'
 import { SettingsModal } from '@/components/settings/SettingsModal'
 import { Toaster } from '@/components/ui/Toast'
 import { useAppStore } from '@/stores/app-store'
-import { Sparkles } from 'lucide-react'
-
-function PromptsView() {
-  return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 14, color: 'var(--text-dim)' }}>
-      <Sparkles size={28} style={{ opacity: 0.25 }} />
-      <div style={{ fontSize: 11, letterSpacing: '0.1em' }}>Prompt templates</div>
-      <span
-        style={{
-          fontSize: 9,
-          padding: '3px 10px',
-          borderRadius: 99,
-          background: 'var(--accent-dim)',
-          color: 'var(--accent)',
-          letterSpacing: '0.1em',
-          fontWeight: 600,
-        }}
-      >
-        COMING IN PHASE B
-      </span>
-      <div style={{ fontSize: 10, color: 'var(--text-dim)', opacity: 0.6, maxWidth: 300, textAlign: 'center', lineHeight: 1.7 }}>
-        Reusable prompt templates for common tool workflows will be available in the next phase.
-      </div>
-    </div>
-  )
-}
+import { PromptsView } from '@/components/prompts/PromptsView'
 
 const PAGE_COMPONENTS = {
   demo: ChatView,

@@ -168,14 +168,13 @@ export async function handleListTools(
 ): Promise<ConnectorResult> {
   const filterById = args.config_id as string | undefined;
 
+  const scopeId = filterById ?? "one";
   const tools = ctx.registry.list()
-    .filter((rt) => !filterById || rt.configId === filterById)
+    .filter((rt) => rt.configId === scopeId)
     .map((rt) => ({
       qualified_name: `${rt.configId}.${rt.tool.name}`,
       config_id:      rt.configId,
-      name:           rt.tool.name,
-      description:    rt.tool.description,
-      param_count:    rt.tool.params.length,
+      tool:           rt.tool,
     }));
 
   return { success: true, data: { tools, total: tools.length } };

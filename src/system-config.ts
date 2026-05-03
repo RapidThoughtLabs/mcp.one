@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -28,10 +29,17 @@ export interface SystemConfig {
 
 const SYSTEM_CONFIG_FILE = "mcp-one.config.json";
 
+/**
+ * Loads system config with precedence: CWD → home dir → empty defaults.
+ * Reading from home dir first means `mcp-one start` launched from any
+ * directory still finds the user's global config.
+ */
 export function loadSystemConfig(cwd: string = process.cwd()): SystemConfig {
-  const configPath = path.join(cwd, SYSTEM_CONFIG_FILE);
+  // Try CWD first (project-local override), then fall back to home dir.
+  const candidates = [path.join(cwd, SYSTEM_CONFIG_FILE), path.join(os.homedir(), SYSTEM_CONFIG_FILE)];
+  const configPath = candidates.find((p) => fs.existsSync(p));
 
-  if (!fs.existsSync(configPath)) {
+  if (!configPath) {
     return {};
   }
 

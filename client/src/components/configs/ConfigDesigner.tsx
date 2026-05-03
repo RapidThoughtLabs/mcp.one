@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import {
   ArrowLeft, ArrowRight, Check, X, Loader2,
-  Globe, Terminal, FileText, Cpu, GitBranch, Plug, Info,
+  Globe, Terminal, FileText, Cpu, GitBranch, Plug, Info, Database,
 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { AuthFormSection, type AuthFields, DEFAULT_AUTH_FIELDS } from './AuthFormSection'
@@ -12,7 +12,7 @@ import { toast } from '@/components/ui/Toast'
 
 // ── Types ─────────────────────────────────────────────────────────
 
-type ConnectorType = 'http' | 'cli' | 'file' | 'grpc' | 'graphql' | 'mcp'
+type ConnectorType = 'http' | 'cli' | 'file' | 'grpc' | 'graphql' | 'mcp' | 'sql'
 
 interface DesignerState {
   // Step 1 — Service Basics
@@ -40,6 +40,19 @@ interface DesignerState {
   mcpCommand: string
   mcpArgs: string
   mcpUrl: string
+  // sql
+  sqlDialect: 'postgres' | 'mysql' | 'sqlite'
+  sqlConnMode: 'dsn' | 'fields'
+  sqlConnectionStringEnv: string
+  sqlHost: string
+  sqlPort: string
+  sqlDatabase: string
+  sqlSsl: boolean
+  sqlPoolMax: string
+  sqlIdleMs: string
+  sqlConnectionTimeoutMs: string
+  sqlDefaultTimeoutMs: string
+  sqlDefaultMaxRows: string
   // Step 2 — Auth
   auth: AuthFields
   // Step 3 — Tools
@@ -55,6 +68,10 @@ const INITIAL_STATE: DesignerState = {
   grpcEndpoint: '', grpcProtoPath: '', grpcTls: false,
   graphqlEndpoint: '',
   mcpTransport: 'stdio', mcpCommand: '', mcpArgs: '', mcpUrl: '',
+  sqlDialect: 'postgres', sqlConnMode: 'dsn',
+  sqlConnectionStringEnv: '', sqlHost: '', sqlPort: '', sqlDatabase: '', sqlSsl: false,
+  sqlPoolMax: '', sqlIdleMs: '', sqlConnectionTimeoutMs: '',
+  sqlDefaultTimeoutMs: '', sqlDefaultMaxRows: '',
   auth: { ...DEFAULT_AUTH_FIELDS },
   tools: [],
 }
@@ -102,6 +119,28 @@ function buildConnector(s: DesignerState): Record<string, unknown> {
       }
       return conn
     }
+    case 'sql': {
+      const conn: Record<string, unknown> = { type: 'sql', dialect: s.sqlDialect }
+      if (s.sqlDialect === 'sqlite') {
+        conn.database = s.sqlDatabase
+      } else if (s.sqlConnMode === 'dsn') {
+        conn.connection_string_env = s.sqlConnectionStringEnv
+      } else {
+        conn.host = s.sqlHost
+        conn.port = parseInt(s.sqlPort, 10) || undefined
+        conn.database = s.sqlDatabase
+        if (s.auth.authType === 'basic') conn.auth = buildAuth(s.auth)
+      }
+      if (s.sqlSsl && s.sqlDialect !== 'sqlite') conn.ssl = true
+      const pool: Record<string, unknown> = {}
+      if (s.sqlPoolMax) pool.max = parseInt(s.sqlPoolMax, 10)
+      if (s.sqlIdleMs) pool.idle_ms = parseInt(s.sqlIdleMs, 10)
+      if (s.sqlConnectionTimeoutMs) pool.connection_timeout_ms = parseInt(s.sqlConnectionTimeoutMs, 10)
+      if (Object.keys(pool).length > 0) conn.pool = pool
+      if (s.sqlDefaultTimeoutMs) conn.default_timeout_ms = parseInt(s.sqlDefaultTimeoutMs, 10)
+      if (s.sqlDefaultMaxRows) conn.default_max_rows = parseInt(s.sqlDefaultMaxRows, 10)
+      return conn
+    }
   }
 }
 
@@ -146,6 +185,9 @@ function buildTool(t: ToolRow): Record<string, unknown> {
   if (t.service) tool.service = t.service
   if (t.rpc_method) tool.rpc_method = t.rpc_method
   if (t.query) tool.query = t.query
+  if (t.sql) tool.sql = t.sql
+  if (t.maxRowsStr) tool.max_rows = parseInt(t.maxRowsStr, 10)
+  if (t.timeoutMsStr) tool.timeout_ms = parseInt(t.timeoutMsStr, 10)
   return tool
 }
 
@@ -182,6 +224,17 @@ function validateStep1(s: DesignerState): Errors {
     errs.mcpCommand = 'Command is required'
   if (s.connectorType === 'mcp' && s.mcpTransport === 'sse' && !s.mcpUrl.trim())
     errs.mcpUrl = 'URL is required'
+  if (s.connectorType === 'sql') {
+    if (s.sqlDialect === 'sqlite') {
+      if (!s.sqlDatabase.trim()) errs.sqlDatabase = 'Database file path is required'
+    } else if (s.sqlConnMode === 'dsn') {
+      if (!s.sqlConnectionStringEnv.trim()) errs.sqlConnectionStringEnv = 'Connection string env var is required'
+    } else {
+      if (!s.sqlHost.trim()) errs.sqlHost = 'Host is required'
+      if (!s.sqlPort.trim()) errs.sqlPort = 'Port is required'
+      if (!s.sqlDatabase.trim()) errs.sqlDatabase = 'Database is required'
+    }
+  }
 
   return errs
 }
@@ -210,6 +263,7 @@ const CONNECTOR_TYPES: { value: ConnectorType; label: string; desc: string; Icon
   { value: 'file',    label: 'File',    desc: 'Local filesystem access',    Icon: FileText },
   { value: 'grpc',    label: 'gRPC',    desc: 'gRPC service via .proto',    Icon: Cpu },
   { value: 'graphql', label: 'GraphQL', desc: 'GraphQL endpoint',           Icon: GitBranch },
+  { value: 'sql',     label: 'SQL',     desc: 'PostgreSQL / MySQL / SQLite', Icon: Database },
   { value: 'mcp',     label: 'MCP',     desc: 'MCP server (auto-discover)', Icon: Plug },
 ]
 
@@ -219,7 +273,7 @@ const STEP_LABELS = ['Service Basics', 'Auth Setup', 'Tool Builder', 'Review & S
 
 function stepApplies(step: number, connectorType: ConnectorType): boolean {
   if (step === 0 || step === 3) return true
-  if (step === 1) return connectorType === 'http' || connectorType === 'graphql'
+  if (step === 1) return connectorType === 'http' || connectorType === 'graphql' || connectorType === 'sql'
   if (step === 2) return connectorType !== 'mcp'
   return true
 }
@@ -446,19 +500,175 @@ function Step1({ state, set, errors }: { state: DesignerState; set: (p: Partial<
           )}
         </div>
       )}
+
+      {state.connectorType === 'sql' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Dialect */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+            <label style={labelStyle}>DIALECT *</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {(['postgres', 'mysql', 'sqlite'] as const).map((d) => (
+                <label key={d} style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px',
+                  borderRadius: 5, cursor: 'pointer',
+                  background: state.sqlDialect === d ? 'var(--accent-dim)' : 'var(--surface2)',
+                  border: `1px solid ${state.sqlDialect === d ? 'var(--accent)' : 'var(--border)'}`,
+                  transition: 'all 0.12s',
+                }}>
+                  <input type="radio" name="sqlDialect" value={d} checked={state.sqlDialect === d}
+                    onChange={() => set({ sqlDialect: d, sqlConnMode: 'dsn' })} style={{ accentColor: 'var(--accent)' }} />
+                  <span style={{ fontSize: 11, color: 'var(--text)', fontWeight: 600 }}>{d}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* Connection mode (hidden for sqlite) */}
+          {state.sqlDialect !== 'sqlite' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              <label style={labelStyle}>CONNECTION MODE *</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {([['dsn', 'Connection string'], ['fields', 'Host & port']] as const).map(([v, lbl]) => (
+                  <label key={v} style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '7px 14px',
+                    borderRadius: 5, cursor: 'pointer',
+                    background: state.sqlConnMode === v ? 'var(--accent-dim)' : 'var(--surface2)',
+                    border: `1px solid ${state.sqlConnMode === v ? 'var(--accent)' : 'var(--border)'}`,
+                    transition: 'all 0.12s',
+                  }}>
+                    <input type="radio" name="sqlConnMode" value={v} checked={state.sqlConnMode === v}
+                      onChange={() => set({ sqlConnMode: v })} style={{ accentColor: 'var(--accent)' }} />
+                    <span style={{ fontSize: 11, color: 'var(--text)', fontWeight: 600 }}>{lbl}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Mode-conditional fields */}
+          {state.sqlDialect === 'sqlite' && (
+            <FieldGroup label="DATABASE FILE PATH *" error={errors.sqlDatabase}>
+              <input style={inputCss(!!errors.sqlDatabase)} value={state.sqlDatabase}
+                onChange={(e) => set({ sqlDatabase: e.target.value })} placeholder="/path/to/db.sqlite" />
+            </FieldGroup>
+          )}
+          {state.sqlDialect !== 'sqlite' && state.sqlConnMode === 'dsn' && (
+            <FieldGroup label="CONNECTION STRING ENV *" error={errors.sqlConnectionStringEnv} hint="Name of the env var holding the full DSN (e.g. DATABASE_URL)">
+              <input style={inputCss(!!errors.sqlConnectionStringEnv)} value={state.sqlConnectionStringEnv}
+                onChange={(e) => set({ sqlConnectionStringEnv: e.target.value })} placeholder="DATABASE_URL" />
+            </FieldGroup>
+          )}
+          {state.sqlDialect !== 'sqlite' && state.sqlConnMode === 'fields' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px', gap: 12 }}>
+                <FieldGroup label="HOST *" error={errors.sqlHost}>
+                  <input style={inputCss(!!errors.sqlHost)} value={state.sqlHost}
+                    onChange={(e) => set({ sqlHost: e.target.value })} placeholder="localhost" />
+                </FieldGroup>
+                <FieldGroup label="PORT *" error={errors.sqlPort}>
+                  <input type="number" style={inputCss(!!errors.sqlPort)} value={state.sqlPort}
+                    onChange={(e) => set({ sqlPort: e.target.value })}
+                    placeholder={state.sqlDialect === 'mysql' ? '3306' : '5432'} />
+                </FieldGroup>
+              </div>
+              <FieldGroup label="DATABASE *" error={errors.sqlDatabase}>
+                <input style={inputCss(!!errors.sqlDatabase)} value={state.sqlDatabase}
+                  onChange={(e) => set({ sqlDatabase: e.target.value })} placeholder="myapp" />
+              </FieldGroup>
+            </div>
+          )}
+
+          {/* SSL (hidden for sqlite) */}
+          {state.sqlDialect !== 'sqlite' && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', userSelect: 'none' }}>
+              <input type="checkbox" checked={state.sqlSsl} onChange={(e) => set({ sqlSsl: e.target.checked })} style={{ accentColor: 'var(--accent)' }} />
+              <span style={{ fontSize: 11, color: 'var(--text)' }}>Enable SSL</span>
+            </label>
+          )}
+
+          {/* Advanced */}
+          <details style={{ border: '1px solid var(--border)', borderRadius: 5, overflow: 'hidden' }}>
+            <summary style={{ padding: '8px 12px', cursor: 'pointer', fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.05em', background: 'var(--surface2)', userSelect: 'none' }}>
+              Advanced (pool & timeouts)
+            </summary>
+            <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+                <FieldGroup label="POOL MAX">
+                  <input type="number" style={inputCss()} value={state.sqlPoolMax}
+                    onChange={(e) => set({ sqlPoolMax: e.target.value })} placeholder="10" />
+                </FieldGroup>
+                <FieldGroup label="IDLE (ms)">
+                  <input type="number" style={inputCss()} value={state.sqlIdleMs}
+                    onChange={(e) => set({ sqlIdleMs: e.target.value })} placeholder="30000" />
+                </FieldGroup>
+                <FieldGroup label="CONN TIMEOUT (ms)">
+                  <input type="number" style={inputCss()} value={state.sqlConnectionTimeoutMs}
+                    onChange={(e) => set({ sqlConnectionTimeoutMs: e.target.value })} placeholder="10000" />
+                </FieldGroup>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <FieldGroup label="DEFAULT TIMEOUT (ms)">
+                  <input type="number" style={inputCss()} value={state.sqlDefaultTimeoutMs}
+                    onChange={(e) => set({ sqlDefaultTimeoutMs: e.target.value })} placeholder="30000" />
+                </FieldGroup>
+                <FieldGroup label="DEFAULT MAX ROWS">
+                  <input type="number" style={inputCss()} value={state.sqlDefaultMaxRows}
+                    onChange={(e) => set({ sqlDefaultMaxRows: e.target.value })} placeholder="1000" />
+                </FieldGroup>
+              </div>
+            </div>
+          </details>
+        </div>
+      )}
     </div>
   )
 }
 
 function Step2({ state, set, errors }: { state: DesignerState; set: (p: Partial<DesignerState>) => void; errors: Errors }) {
-  const applies = state.connectorType === 'http' || state.connectorType === 'graphql'
-  if (!applies) {
+  const ct = state.connectorType
+
+  if (ct === 'sql') {
+    if (state.sqlDialect === 'sqlite') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '50px 0', color: 'var(--text-dim)' }}>
+          <Info size={28} style={{ opacity: 0.3 }} />
+          <div style={{ fontSize: 12, letterSpacing: '0.04em' }}>Auth not applicable</div>
+          <div style={{ fontSize: 10, color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.7, maxWidth: 320 }}>
+            SQLite uses a local file — no credentials needed. Click Next to continue.
+          </div>
+        </div>
+      )
+    }
+    if (state.sqlConnMode === 'dsn') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '50px 0', color: 'var(--text-dim)' }}>
+          <Info size={28} style={{ opacity: 0.3 }} />
+          <div style={{ fontSize: 12, letterSpacing: '0.04em' }}>Credentials in DSN</div>
+          <div style={{ fontSize: 10, color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.7, maxWidth: 340 }}>
+            The connection string env var already contains your credentials. No separate auth setup needed. Click Next to continue.
+          </div>
+        </div>
+      )
+    }
+    // fields mode — lock to basic, show DB-appropriate labels
+    return (
+      <AuthFormSection
+        fields={{ ...state.auth, authType: 'basic' }}
+        onChange={(auth) => set({ auth })}
+        errors={errors}
+        lockedType="basic"
+        labels={{ usernameEnv: 'DB USERNAME ENV VAR *', tokenEnv: 'DB PASSWORD ENV VAR *' }}
+      />
+    )
+  }
+
+  if (ct !== 'http' && ct !== 'graphql') {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, padding: '50px 0', color: 'var(--text-dim)' }}>
         <Info size={28} style={{ opacity: 0.3 }} />
         <div style={{ fontSize: 12, letterSpacing: '0.04em' }}>Auth not applicable</div>
         <div style={{ fontSize: 10, color: 'var(--text-dim)', textAlign: 'center', lineHeight: 1.7, maxWidth: 320 }}>
-          The <strong style={{ color: 'var(--text)' }}>{state.connectorType.toUpperCase()}</strong> connector does not support authentication configuration. Click Next to continue.
+          The <strong style={{ color: 'var(--text)' }}>{ct.toUpperCase()}</strong> connector does not support authentication configuration. Click Next to continue.
         </div>
       </div>
     )

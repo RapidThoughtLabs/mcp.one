@@ -100,6 +100,10 @@ import {
   handleServerStatus,
 } from "./internal-handlers/server-ops.js";
 
+import {
+  handleSearch,
+} from "./internal-handlers/search-ops.js";
+
 const HANDLERS: Record<string, Handler> = {
   // Config CRUD
   create_config:   handleCreateConfig,
@@ -128,4 +132,7 @@ const HANDLERS: Record<string, Handler> = {
 
   // Server
   server_status: handleServerStatus,
+
+  // Discovery
+  search: handleSearch,
 };

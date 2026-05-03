@@ -17,6 +17,7 @@ export function ChatView() {
     provider,
     providerPickerOpen,
     activeTemplateId,
+    tokenUsage,
     send,
     stop,
     clear,
@@ -27,6 +28,10 @@ export function ChatView() {
     clearProvider,
     setActiveTemplateId,
   } = useChat()
+
+  function formatTokens(n: number): string {
+    return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+  }
 
   const { getModels, customModels } = useLlmStore()
 
@@ -130,6 +135,31 @@ export function ChatView() {
                 </optgroup>
               )}
             </select>
+            {tokenUsage.total > 0 && (
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                {[
+                  { label: '↓', value: tokenUsage.input },
+                  { label: '↑', value: tokenUsage.output },
+                  { label: 'Σ', value: tokenUsage.total },
+                ].map(({ label, value }) => (
+                  <span
+                    key={label}
+                    style={{
+                      background: 'var(--accent-dim)',
+                      color: 'var(--accent)',
+                      borderRadius: 3,
+                      padding: '1px 5px',
+                      fontSize: 9,
+                      fontFamily: "'JetBrains Mono', monospace",
+                      letterSpacing: '0.04em',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {label} {formatTokens(value)}
+                  </span>
+                ))}
+              </div>
+            )}
             <Button size="sm" variant="ghost" onClick={clearProvider}>
               disconnect
             </Button>

@@ -21,6 +21,10 @@ export interface ToolRow {
   rpc_method: string
   // GraphQL
   query: string
+  // SQL
+  sql: string
+  maxRowsStr: string
+  timeoutMsStr: string
   // Common
   params: ParamRow[]
 }
@@ -34,6 +38,7 @@ export function newTool(): ToolRow {
     operation: 'read', path_template: '',
     service: '', rpc_method: '',
     query: '',
+    sql: '', maxRowsStr: '', timeoutMsStr: '',
     params: [],
   }
 }
@@ -213,6 +218,36 @@ function ToolItem({
                 onChange={(e) => set({ query: e.target.value })}
                 placeholder="query ListUsers { users { id name email } }"
               />
+            </div>
+          )}
+
+          {/* SQL-specific */}
+          {connectorType === 'sql' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <label style={labelStyle}>SQL QUERY *</label>
+                <textarea
+                  style={{ ...inputStyle, fontFamily: 'monospace', minHeight: 90, lineHeight: 1.5, resize: 'vertical' }}
+                  value={tool.sql}
+                  onChange={(e) => set({ sql: e.target.value })}
+                  placeholder="SELECT id, email FROM users WHERE active = true AND created_at > :since LIMIT :limit"
+                />
+                <span style={{ fontSize: 9, color: 'var(--text-dim)', opacity: 0.7, lineHeight: 1.4 }}>
+                  Use <code>:name</code> placeholders that map to params. Curly-brace {'{{name}}'} is NOT supported here.
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <label style={labelStyle}>MAX ROWS</label>
+                  <input type="number" style={inputStyle} value={tool.maxRowsStr}
+                    onChange={(e) => set({ maxRowsStr: e.target.value })} placeholder="config default" />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  <label style={labelStyle}>TIMEOUT (ms)</label>
+                  <input type="number" style={inputStyle} value={tool.timeoutMsStr}
+                    onChange={(e) => set({ timeoutMsStr: e.target.value })} placeholder="config default" />
+                </div>
+              </div>
             </div>
           )}
 

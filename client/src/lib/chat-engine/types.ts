@@ -102,6 +102,14 @@ export interface PromptFile {
   templates: PromptTemplate[]
 }
 
+// ── Token Usage ───────────────────────────────────────────────────
+
+export interface TokenUsage {
+  input: number
+  output: number
+  total: number
+}
+
 // ── Engine Callbacks (no React dependency) ────────────────────────
 
 export interface ChatEngineCallbacks {
@@ -111,4 +119,5 @@ export interface ChatEngineCallbacks {
   onToolCallStart: (msgId: string, toolCall: ToolCallRequest) => void
   onToolCallComplete: (msgId: string, result: ToolCallResult) => void
   onError: (error: Error) => void
+  onUsage?: (usage: TokenUsage) => void
 }

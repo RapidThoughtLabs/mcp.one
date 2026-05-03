@@ -1,0 +1,64 @@
+[mcp-one] Loading configs from: /Users/ruchitnannavare/GitHub/RapidThoughtLabs/mcp.one/mcp-configs
+[mcp-one] Loading configs from: /Users/ruchitnannavare/GitHub/RapidThoughtLabs/mcp.one/mcp-configs
+[loader] Loaded: github (3 tools) → https://api.github.com
+[loader] Loaded: github (3 tools) → https://api.github.com
+[loader] Loaded: jira (3 tools) → https://your-domain.atlassian.net/rest/api/3
+[loader] Loaded: jira (3 tools) → https://your-domain.atlassian.net/rest/api/3
+[loader] Loaded: slack (3 tools) → https://slack.com/api
+[loader] Loaded: slack (3 tools) → https://slack.com/api
+
+
+┌─────────────────────────────────────────┐
+│            mcp.one  v0.1.0              │
+┌─────────────────────────────────────────┐
+│            mcp.one  v0.1.0              │
+│   one server. any REST API. any LLM.   │
+│   one server. any REST API. any LLM.   │
+└─────────────────────────────────────────┘
+└─────────────────────────────────────────┘
+
+
+  3 config(s) · 9 tool(s) · hot-reload ON
+  3 config(s) · 9 tool(s) · hot-reload ON
+
+
+  ◆ github  (GitHub API)
+  ◆ github  (GitHub API)
+    url:   https://api.github.com
+    url:   https://api.github.com
+    auth:  bearer ⚠️  missing: GITHUB_TOKEN
+    auth:  bearer ⚠️  missing: GITHUB_TOKEN
+    tools: list_repos, create_issue, get_issue
+    tools: list_repos, create_issue, get_issue
+
+
+  ◆ jira  (Jira Cloud API)
+  ◆ jira  (Jira Cloud API)
+    url:   https://your-domain.atlassian.net/rest/api/3
+    auth:  basic ⚠️  missing: JIRA_EMAIL, JIRA_API_TOKEN
+    url:   https://your-domain.atlassian.net/rest/api/3
+    auth:  basic ⚠️  missing: JIRA_EMAIL, JIRA_API_TOKEN
+    tools: search_issues, create_issue, get_issue
+
+    tools: search_issues, create_issue, get_issue
+
+  ◆ slack  (Slack Web API)
+  ◆ slack  (Slack Web API)
+    url:   https://slack.com/api
+    auth:  bearer ⚠️  missing: SLACK_BOT_TOKEN
+    tools: send_message, list_channels, get_channel_history
+    url:   https://slack.com/api
+    auth:  bearer ⚠️  missing: SLACK_BOT_TOKEN
+    tools: send_message, list_channels, get_channel_history
+
+
+  ⚠️  3 config(s) have missing auth. Affected tools will return a structured error when called.
+  ⚠️  3 config(s) have missing auth. Affected tools will return a structured error when called.
+     Set the missing env vars in your .env file and restart.
+
+     Set the missing env vars in your .env file and restart.
+
+[mcp-one] Server running — 9 tools from 3 config(s)
+[mcp-one] Server running — 9 tools from 3 config(s)
+[mcp-one] Watching /Users/ruchitnannavare/GitHub/RapidThoughtLabs/mcp.one/mcp-configs for config changes
+[mcp-one] Watching /Users/ruchitnannavare/GitHub/RapidThoughtLabs/mcp.one/mcp-configs for config changes

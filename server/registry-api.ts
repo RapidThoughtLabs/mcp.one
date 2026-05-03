@@ -34,8 +34,14 @@ import {
   getConfigMeta,
   checkUpdates,
   whoami,
+  publishNew,
+  publishVersion,
   RegistryError,
+  type PublishNewPayload,
+  type PublishVersionPayload,
 } from "../src/registry/client.js";
+
+import { extractBaseAndConnector } from "../src/lib/connector-types.js";
 
 // ── Install helper ────────────────────────────────────────────────
 
@@ -54,7 +60,15 @@ export function createRegistryRouter(): Router {
       fn(req, res).catch((err: unknown) => {
         const status = err instanceof RegistryError ? err.status : (err as { status?: number }).status ?? 500;
         const message = err instanceof Error ? err.message : "Internal error";
-        res.status(status).json({ error: message });
+        if (err instanceof RegistryError && err.body?.["code"]) {
+          res.status(status).json({
+            error:   String(err.body["message"] ?? message),
+            code:    String(err.body["code"]),
+            message: String(err.body["message"] ?? message),
+          });
+        } else {
+          res.status(status).json({ error: message });
+        }
       });
     };
   }
@@ -218,6 +232,129 @@ export function createRegistryRouter(): Router {
     addToManifest(qualifiedSlug, resolvedVersion, resolvedConnector, registry);
 
     res.status(201).json({ ok: true, configId: installedId, qualified_slug: qualifiedSlug, version: resolvedVersion });
+  }));
+
+  // ── POST /api/registry/publish ────────────────────────────────────
+  // Publish a config to the registry for the first time.
+  // Body: { config_id, namespace, name, description, category, tags, visibility, message, payload, registry? }
+  router.post("/publish", wrap(async (req, res) => {
+    const {
+      registry = "default",
+      config_id,
+      namespace,
+      name,
+      description = "",
+      category = "",
+      tags = [],
+      visibility = "public",
+      message = "",
+      payload,
+    } = req.body as {
+      registry?: string;
+      config_id: string;
+      namespace: string;
+      name: string;
+      description?: string;
+      category?: string;
+      tags?: string[];
+      visibility?: "public" | "private";
+      message?: string;
+      payload: unknown;
+    };
+
+    if (!config_id || !namespace || !name || !payload) {
+      res.status(400).json({ error: '"config_id", "namespace", "name", and "payload" are required' });
+      return;
+    }
+
+    if (!isLoggedIn(registry)) {
+      res.status(401).json({ error: "Not logged in. Run: mcp-one login" });
+      return;
+    }
+
+    // Derive slug (base id without connector suffix) and connector_type from the payload
+    const { base } = extractBaseAndConnector(config_id);
+    const slug = base.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/^-+|-+$/g, "");
+    const connectorType =
+      payload && typeof payload === "object"
+        ? String((payload as Record<string, unknown>)["connector"]
+            ? ((payload as Record<string, unknown>)["connector"] as Record<string, unknown>)["type"] ?? "mcp"
+            : "mcp")
+        : "mcp";
+
+    const publishPayload: PublishNewPayload = {
+      namespace: namespace.replace(/^@/, ""),
+      slug,
+      name,
+      description,
+      category,
+      connector_type: connectorType,
+      visibility: visibility as "public" | "private",
+      tags: Array.isArray(tags) ? tags : [],
+      payload,
+      message,
+    };
+
+    try {
+      const result = await publishNew(publishPayload, registry);
+      addToManifest(result.config.qualified_slug, result.version.version, result.config.connector_type, registry);
+      res.status(201).json(result);
+    } catch (err) {
+      if (err instanceof RegistryError && err.status === 409) {
+        res.status(409).json({ error: "slug_exists", meta: err.body });
+        return;
+      }
+      throw err;
+    }
+  }));
+
+  // ── POST /api/registry/publish-version/:namespace/:slug ───────────
+  // Publish a new version of an existing registry config.
+  // Body: { version, payload, message?, qualified_slug?, connector_type?, registry? }
+  router.post("/publish-version/:namespace/:slug", wrap(async (req, res) => {
+    const { namespace, slug } = req.params as { namespace: string; slug: string };
+    const {
+      registry = "default",
+      payload,
+      message = "",
+      qualified_slug,
+      connector_type,
+    } = req.body as {
+      registry?: string;
+      payload: unknown;
+      message?: string;
+      qualified_slug?: string;
+      connector_type?: string;
+    };
+
+    if (!payload) {
+      res.status(400).json({ error: '"payload" is required' });
+      return;
+    }
+
+    if (!isLoggedIn(registry)) {
+      res.status(401).json({ error: "Not logged in. Run: mcp-one login" });
+      return;
+    }
+
+    const versionPayload: PublishVersionPayload = { payload, message };
+    const result = await publishVersion(namespace, slug, versionPayload, registry);
+
+    if (qualified_slug && connector_type) {
+      addToManifest(qualified_slug, result.version, connector_type, registry);
+    }
+
+    res.json(result);
+  }));
+
+  // ── GET /api/registry/payload/:namespace/:slug ────────────────────
+  // Fetch the current published payload for diff display during version bump.
+  router.get("/payload/:namespace/:slug", wrap(async (req, res) => {
+    const { namespace, slug } = req.params as { namespace: string; slug: string };
+    const registry       = (req.query["registry"] as string | undefined) ?? "default";
+    const connector_type = (req.query["connector_type"] as string | undefined);
+    const { payload }    = await fetchVersionPayload(namespace, slug, connector_type, undefined, registry);
+    res.json(payload);
   }));
 
   // ── DELETE /api/registry/uninstall/:id ───────────────────────────

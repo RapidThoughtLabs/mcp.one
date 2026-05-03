@@ -7,7 +7,9 @@ import { loadSingleConfig } from "./loader.js";
 import { connectorRegistry } from "./connectors/registry.js";
 import type { GraphqlConnector } from "./connectors/graphql.js";
 import type { GrpcConnector } from "./connectors/grpc.js";
-import type { GraphqlConnectorConfig, GrpcConnectorConfig } from "./types.js";
+import type { SqlConnector } from "./connectors/sql.js";
+import type { MongoConnector } from "./connectors/mongodb.js";
+import type { GraphqlConnectorConfig, GrpcConnectorConfig, SqlConnectorConfig, MongoConnectorConfig } from "./types.js";
 
 // ── Constants ──────────────────────────────────────────────────────
 
@@ -111,6 +113,18 @@ export function startWatcher(
         config.tools = grpc.getDiscoveredTools(config.id);
       }
 
+      // Reinit SQL pool on add
+      if (config.connector.type === "sql") {
+        const sql = connectorRegistry.get("sql") as SqlConnector;
+        await sql.reinitConfig(config.id, config.connector as SqlConnectorConfig);
+      }
+
+      // Reinit MongoDB client on add
+      if (config.connector.type === "mongodb") {
+        const mongo = connectorRegistry.get("mongodb") as MongoConnector;
+        await mongo.reinitConfig(config.id, config.connector as MongoConnectorConfig);
+      }
+
       fileToConfigId.set(filePath, config.id);
       registry.registerConfig(config);
       await notifyToolsChanged();
@@ -163,6 +177,18 @@ export function startWatcher(
           config.overlays,
         );
         config.tools = grpc.getDiscoveredTools(config.id);
+      }
+
+      // Reinit SQL pool on change
+      if (config.connector.type === "sql") {
+        const sql = connectorRegistry.get("sql") as SqlConnector;
+        await sql.reinitConfig(config.id, config.connector as SqlConnectorConfig);
+      }
+
+      // Reinit MongoDB client on change
+      if (config.connector.type === "mongodb") {
+        const mongo = connectorRegistry.get("mongodb") as MongoConnector;
+        await mongo.reinitConfig(config.id, config.connector as MongoConnectorConfig);
       }
 
       fileToConfigId.set(filePath, config.id);

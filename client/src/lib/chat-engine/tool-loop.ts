@@ -37,6 +37,10 @@ function genId(): string {
   return crypto.randomUUID()
 }
 
+// Hard cap on tool result size sent to the LLM.
+// Large payloads (e.g. Context7 doc fetches) cause context-overflow 400s on the next turn.
+const MAX_TOOL_RESULT_CHARS = 32_000
+
 /** Convert internal ChatMessage history to OpenAI API wire format */
 function toOpenAIMessages(messages: ChatMessage[], systemPrompt: string): OpenAIMessage[] {
   const result: OpenAIMessage[] = [
@@ -63,9 +67,13 @@ function toOpenAIMessages(messages: ChatMessage[], systemPrompt: string): OpenAI
         result.push({ role: 'assistant', content: msg.content })
       }
     } else if (msg.role === 'tool' && msg.toolResult) {
+      let content = JSON.stringify(msg.toolResult.result)
+      if (content.length > MAX_TOOL_RESULT_CHARS) {
+        content = content.slice(0, MAX_TOOL_RESULT_CHARS) + `\n...[truncated — ${content.length} chars total]`
+      }
       result.push({
         role: 'tool',
-        content: JSON.stringify(msg.toolResult.result),
+        content,
         tool_call_id: msg.toolResult.toolCallId,
         name: msg.toolResult.name,
       })
@@ -89,11 +97,13 @@ export async function runToolLoop(
   const history = [...messages]
   let iteration = 0
 
+  // one.* tool list is stable for the lifetime of a turn — fetch once.
+  // Service tools are discovered via one.search/one.get_tool and called
+  // directly; they never appear in the function list.
+  const tools = await executor.getTools()
+
   while (iteration < maxIter) {
     iteration++
-
-    // Get current tools (may have changed if configs were added)
-    const tools = await executor.getTools()
 
     // Build LLM messages from history
     const openAiMessages = toOpenAIMessages(history, systemPrompt)
@@ -101,7 +111,6 @@ export async function runToolLoop(
     // Stream the LLM response
     let accumulatedContent = ''
     let pendingToolCalls: ToolCallRequest[] = []
-    let streamDone = false
     let streamError: Error | null = null
     let messageStarted = false
 
@@ -134,13 +143,13 @@ export async function runToolLoop(
             pendingToolCalls = calls
           },
           onDone: () => {
-            streamDone = true
             resolve()
           },
           onError: (err) => {
             streamError = err
             resolve()
           },
+          onUsage: callbacks.onUsage,
         },
         signal,
       )

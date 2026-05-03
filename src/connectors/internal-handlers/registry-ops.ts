@@ -213,8 +213,11 @@ export async function handleRegistryInstall(
 
   // ── Step 3: Already-installed check ──
 
+  const outFile = path.join(ctx.configDir, `mcp.${installedId}.json`);
   const existing = getInstalledEntry(qualifiedSlug, registry);
-  if (existing && !force) {
+  // Only block if manifest says installed AND the config file actually exists in this configDir.
+  // Manifest-only entries (file deleted or installed from a different cwd) are treated as not installed.
+  if (existing && !force && fs.existsSync(outFile)) {
     return {
       success: false,
       data: {
@@ -251,22 +254,22 @@ export async function handleRegistryInstall(
       namespace, rawSlug, resolvedConnector, version, registry,
     );
 
-    // D2: overwrite the id field with the compound form
-    const payloadObj = payload as Record<string, unknown>;
-    payloadObj.id    = installedId;
-
-    const payloadJson = JSON.stringify(payloadObj, null, 2);
-
-    // Integrity check (etag is computed AFTER id mutation so both sides must agree)
-    if (etag && !verifyEtag(payloadJson, etag)) {
+    // Integrity check over the original registry payload (before any local mutations)
+    const originalPayloadJson = JSON.stringify(payload, null, 2);
+    if (etag && !verifyEtag(originalPayloadJson, etag)) {
       return {
         success: false,
         data: { error: `Integrity check failed for ${qualifiedSlug}@${resolvedVersion}. ETag mismatch — download may be corrupted.` },
       };
     }
 
+    // D2: overwrite the id field with the compound form
+    const payloadObj = payload as Record<string, unknown>;
+    payloadObj.id    = installedId;
+
+    const payloadJson = JSON.stringify(payloadObj, null, 2);
+
     // D1: filename is mcp.{base_id}-{connector_type}.json
-    const outFile = path.join(ctx.configDir, `mcp.${installedId}.json`);
     fs.mkdirSync(ctx.configDir, { recursive: true });
     fs.writeFileSync(outFile, payloadJson + "\n", "utf-8");
 

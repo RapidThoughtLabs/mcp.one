@@ -11,6 +11,7 @@ const CONNECTOR_COLORS: Record<string, { bg: string; text: string }> = {
   graphql:  { bg: 'rgba(225, 0, 152, 0.15)',   text: '#e10098' },
   grpc:     { bg: 'rgba(161, 110, 255, 0.15)', text: '#a16eff' },
   internal: { bg: 'rgba(148, 163, 184, 0.12)', text: '#94a3b8' },
+  sql:      { bg: 'rgba(99, 102, 241, 0.15)',  text: '#818cf8' },
 }
 
 // Group flat tool list by configId
