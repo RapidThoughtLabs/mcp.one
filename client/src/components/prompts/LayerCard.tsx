@@ -18,9 +18,9 @@ export function LayerCard({ layer, index, gravity }: LayerCardProps) {
   const preRef = useRef<HTMLPreElement>(null)
   const tokenCount = countTokens(layer.content)
 
-  const borderColor = gravity ? 'var(--accent)' : 'var(--border)'
-  const borderWidth = gravity ? '1.5px' : '1px'
-  const boxShadow = gravity ? 'var(--glow)' : 'none'
+  const borderColor = 'var(--border)'
+  const borderWidth = '1px'
+  const boxShadow = 'none'
 
   async function handleCopy() {
     try {
@@ -46,6 +46,7 @@ export function LayerCard({ layer, index, gravity }: LayerCardProps) {
         background: 'var(--surface)',
         boxShadow,
         overflow: 'hidden',
+        flexShrink: 0,
       }}
     >
       {/* Header */}

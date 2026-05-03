@@ -37,6 +37,7 @@ export function ComposedPromptCard({ composedText, handshakeTokens }: ComposedPr
         borderRadius: 6,
         background: 'var(--bg)',
         overflow: 'hidden',
+        flexShrink: 0,
       }}
     >
       {/* Header */}

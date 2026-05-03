@@ -44,12 +44,6 @@ export function McpPanel() {
   const groups = groupByConfig(tools)
   const totalTools = tools.length
 
-  // Auto-open first group when tools first arrive
-  if (groups.size > 0 && openGroups.size === 0) {
-    const firstKey = groups.keys().next().value as string | undefined
-    if (firstKey) setOpenGroups(new Set([firstKey]))
-  }
-
   const toggleGroup = (id: string) => {
     setOpenGroups((prev) => {
       const next = new Set(prev)

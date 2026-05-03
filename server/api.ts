@@ -156,7 +156,8 @@ export function createApiRouter(mcp: McpClientInstance): Router {
         }
         throw err;
       }
-      const tools = mcp.listTools().filter((t) => t.configId === id);
+      const allTools = (await admin.get("/tools")) as { configId: string; name: string; description: string; inputSchema: Record<string, unknown> }[]
+      const tools = allTools.filter((t) => t.configId === id);
       const manifest = loadManifest();
       const registries = loadRegistries();
       const entry = manifest.installed.find((e) => {

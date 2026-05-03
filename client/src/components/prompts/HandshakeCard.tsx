@@ -80,6 +80,7 @@ export function HandshakeCard({ onTokenCount }: HandshakeCardProps) {
         borderRadius: 6,
         background: 'var(--surface)',
         overflow: 'hidden',
+        flexShrink: 0,
       }}
     >
       {/* Header */}
