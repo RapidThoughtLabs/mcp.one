@@ -1,4 +1,4 @@
-import { encode } from 'gpt-tokenizer/esm/encoding/cl100k_base'
+import { encode } from 'gpt-tokenizer/encoding/cl100k_base'
 
 const cache = new Map<string, number>()
 
