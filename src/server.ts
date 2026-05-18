@@ -133,11 +133,11 @@ function makeServer(
     const caller: CallerContext = {
       requestId: randomUUID(),
       transport: transportCtx?.transport ?? "stdio",
-      agentId:   transportCtx?.agentId   ?? (meta?.agentId   as string | undefined),
-      chatId:    transportCtx?.chatId    ?? (meta?.chatId    as string | undefined),
+      agentId: transportCtx?.agentId ?? (meta?.agentId as string | undefined),
+      chatId: transportCtx?.chatId ?? (meta?.chatId as string | undefined),
       sessionId: transportCtx?.sessionId ?? (meta?.sessionId as string | undefined),
-      source:    transportCtx?.source    ?? (meta?.source    as string | undefined),
-      ip:        transportCtx?.ip,
+      source: transportCtx?.source ?? (meta?.source as string | undefined),
+      ip: transportCtx?.ip,
     };
 
     const tool = registry.get(toolName);
@@ -188,6 +188,8 @@ export interface StartServerOptions {
   port?: number;
   /** Config directory — mounts /admin/configs/* REST API when http is true. */
   configDir?: string;
+  /** Live watcher handle — enables the admin API to pause/resume hot reload. */
+  watcher?: { pause(): void; resume(): void; isPaused(): boolean };
 }
 
 // ── startServer ───────────────────────────────────────────────────
@@ -252,7 +254,7 @@ export async function startServer(
     // Console config CRUD — humans editing JSON. Full replace-style PUT.
     // Separate from the MCP tools (one.*) which are narrow/additive for LLMs.
     if (options.configDir) {
-      app.use("/admin", createAdminRouter({ configDir: options.configDir, registry }));
+      app.use("/admin", createAdminRouter({ configDir: options.configDir, registry, watcher: options.watcher ?? null }));
       console.error(`[mcp-one] admin  ready — http://localhost:${port}/admin/configs`);
     }
 
@@ -263,24 +265,53 @@ export async function startServer(
     // Extract caller identity from request headers so it can be threaded
     // through the tool call and surfaced in logs.
     app.all("/mcp", async (req, res) => {
+      // Restore default timeouts (or leave at user's 60s)
+      req.setTimeout(60000);
+      res.setTimeout(60000);
+
       const transportCtx: Partial<CallerContext> = {
         transport: "http",
-        agentId:   req.headers["x-agent-id"]   as string | undefined,
-        chatId:    req.headers["x-chat-id"]    as string | undefined,
+        agentId: req.headers["x-agent-id"] as string | undefined,
+        chatId: req.headers["x-chat-id"] as string | undefined,
         sessionId: req.headers["x-session-id"] as string | undefined,
-        source:    req.headers["x-source"]     as string | undefined,
-        ip:        req.ip ?? req.socket.remoteAddress,
+        source: req.headers["x-source"] as string | undefined,
+        ip: req.ip ?? req.socket.remoteAddress,
       };
       const reqTransport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
       });
       const reqServer = makeServer(registry, transportCtx);
       await reqServer.connect(reqTransport);
+
+      // Track the server so it receives ToolListChanged broadcast notifications
+      activeServers.push(reqServer);
+
+      // Properly fix idle timeouts by sending SSE keep-alive comments.
+      // This resets the TCP/Node idle timer without needing setTimeout(0),
+      // preventing zombie connections while keeping long LLM waits alive.
+      let keepAliveTimer: NodeJS.Timeout | undefined;
+      if (req.method === "GET") {
+        keepAliveTimer = setInterval(() => {
+          if (!res.writableEnded) {
+            res.write(": keepalive\n\n");
+          } else {
+            clearInterval(keepAliveTimer);
+          }
+        }, 15_000);
+      }
+
       try {
         await reqTransport.handleRequest(req, res, req.body as unknown);
       } catch (err) {
         if (!res.headersSent) {
           res.status(500).json({ error: (err as Error).message });
+        }
+      } finally {
+        if (keepAliveTimer) clearInterval(keepAliveTimer);
+        // Prevent memory leaks when connection closes
+        const idx = activeServers.indexOf(reqServer);
+        if (idx !== -1) {
+          activeServers.splice(idx, 1);
         }
       }
     });

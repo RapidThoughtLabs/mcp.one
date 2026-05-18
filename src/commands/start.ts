@@ -320,11 +320,20 @@ export async function run(args: string[]): Promise<void> {
     }
   }
 
-  // Start server with the complete, fully-discovered tool list
+  // Start server with the complete, fully-discovered tool list.
+  // Use a ref so the watcher handle can be threaded into the admin router
+  // before startWatcher() is actually called (server mounts the admin router first).
+  const watcherRef: { pause(): void; resume(): void; isPaused(): boolean } = {
+    pause() { /* will be overwritten once startWatcher runs */ },
+    resume() { /* will be overwritten once startWatcher runs */ },
+    isPaused() { return false; },
+  };
+
   const { registry, notifyToolsChanged } = await startServer(allConfigs, {
     http: httpMode,
     port,
     configDir,
+    watcher: watcherRef,
   });
 
   // ── Bind internal connector with live server context ────────────
@@ -338,5 +347,10 @@ export async function run(args: string[]): Promise<void> {
   process.once("SIGTERM", shutdown);
   process.once("SIGINT", shutdown);
 
-  startWatcher(configDir, registry, notifyToolsChanged);
+  const liveWatcher = startWatcher(configDir, registry, notifyToolsChanged);
+
+  // Patch the ref so the already-mounted admin route delegate to the real watcher
+  watcherRef.pause    = () => liveWatcher.pause();
+  watcherRef.resume   = () => liveWatcher.resume();
+  watcherRef.isPaused = () => liveWatcher.isPaused();
 }

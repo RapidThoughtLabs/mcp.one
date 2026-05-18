@@ -13,13 +13,20 @@ import type { ConfigSummary } from '@/types/server'
 
 function connectorLabel(type: string): string {
   const map: Record<string, string> = {
-    http: 'HTTP', cli: 'CLI', file: 'File', grpc: 'gRPC', graphql: 'GraphQL', mcp: 'MCP',
+    http: 'HTTP', cli: 'CLI', file: 'File', grpc: 'gRPC', graphql: 'GraphQL', mcp: 'MCP', sql: 'SQL',
   }
   return map[type] ?? type
 }
 
 function connectorUrl(cfg: ConfigSummary): string {
-  return cfg.connector.base_url ?? cfg.connector.endpoint ?? cfg.connector.transport ?? cfg.connector.type
+  const c = cfg.connector
+  if (c.type === 'sql') {
+    if (c.connection_string_env) return `env:${String(c.connection_string_env)}`
+    if (c.host) return `${String(c.dialect)}://${String(c.host)}:${String(c.port ?? '?')}/${String(c.database ?? '')}`
+    if (c.database) return `${String(c.dialect)}:${String(c.database)}`
+    return String(c.type)
+  }
+  return (c.base_url ?? c.endpoint ?? c.transport ?? c.type) as string
 }
 
 // ── CredentialForm ─────────────────────────────────────────────────
@@ -125,6 +132,7 @@ function ConfigCard({ cfg, onEdit, onOpen, onRefetch }: { cfg: ConfigSummary; on
         borderRadius: 6,
         overflow: 'hidden',
         transition: 'border-color 0.15s, box-shadow 0.15s',
+        flexShrink: 0,
       }}
     >
       <div style={{ height: 2, background: authOk ? 'var(--accent)' : 'var(--red)', opacity: authOk ? 0.7 : 1 }} />
@@ -286,7 +294,7 @@ function ConfigsList({
       </div>
 
       {/* Config list */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 32px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         {error ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '60px 20px', color: 'var(--red)' }}>
             <AlertCircle size={28} style={{ opacity: 0.5 }} />

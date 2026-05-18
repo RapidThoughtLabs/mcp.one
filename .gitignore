@@ -6,3 +6,4 @@ dist/
 docs/
 mcp-configs/
 .claude/
+.mcp.json

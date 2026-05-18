@@ -859,7 +859,7 @@ export function ConfigDesigner({ createConfig, onClose }: ConfigDesignerProps) {
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 24px 48px' }}>
         {step === 0 && <Step1 state={state} set={set} errors={errors} />}
         {step === 1 && <Step2 state={state} set={set} errors={errors} />}
         {step === 2 && <Step3 state={state} set={set} />}

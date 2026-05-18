@@ -201,7 +201,7 @@ export function ConfigDetailView({ cfg, onClose }: { cfg: ConfigSummary; onClose
       </div>
 
       {/* Body */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '20px 20px 40px' }}>
         {loading ? (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '60px 0', color: 'var(--text-dim)' }}>
             <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />

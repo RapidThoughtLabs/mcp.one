@@ -119,6 +119,40 @@ export function createApiRouter(mcp: McpClientInstance): Router {
     res.json({ ok: true });
   });
 
+  // ── GET /api/server-settings ─────────────────────────────────────
+  // Read current hot reload + log level from the mcp-one admin API.
+
+  router.get("/server-settings", async (_req, res) => {
+    try {
+      const settings = await admin.get("/server-settings");
+      res.json(settings);
+    } catch (err) {
+      if (err instanceof AdminUnavailableError) {
+        // Return safe defaults when mcp-one is not connected
+        res.json({ hotReload: true, logLevel: "info", unavailable: true });
+        return;
+      }
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // ── POST /api/server-settings ────────────────────────────────────
+  // Apply new hot reload / log level settings to the live mcp-one process.
+
+  router.post("/server-settings", async (req, res) => {
+    try {
+      const data = await admin.post("/server-settings", req.body as unknown);
+      res.json(data);
+    } catch (err) {
+      if (err instanceof AdminUnavailableError) {
+        res.status(503).json({ error: "mcp-one not connected" });
+        return;
+      }
+      const status = (err as Error & { status?: number }).status ?? 500;
+      res.status(status).json({ error: (err as Error).message });
+    }
+  });
+
   // ── GET /api/configs ─────────────────────────────────────────────
   // Proxy to mcp-one admin API — live tool counts included server-side.
 
@@ -318,6 +352,21 @@ export function createApiRouter(mcp: McpClientInstance): Router {
     const limit = 500;
     const logs = mcp.getLogs().slice(-limit);
     res.json(logs);
+  });
+
+  // ── POST /api/logs ───────────────────────────────────────────────
+  // Client telemetry logging (for LLM request visibility in the backend console)
+
+  router.post("/logs", (req, res) => {
+    const { level, source, msg } = req.body as { level?: string; source?: string; msg?: string };
+    if (level && source && msg) {
+      mcp.addLog(
+        level as "info" | "warn" | "error" | "debug",
+        source as "mcp" | "api" | "config",
+        msg
+      );
+    }
+    res.json({ ok: true });
   });
 
   // ── POST /api/credentials ────────────────────────────────────────

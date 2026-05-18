@@ -189,7 +189,8 @@ export function PublishModal({ open, onClose, cfg }: PublishModalProps) {
       setBumpMessage('')
       setDiffOpen(false)
     }
-  }, [open, cfg])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, cfg.id])
 
   const handlePublish = async () => {
     if (!namespace.trim()) { setError('Namespace is required'); return }

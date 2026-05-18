@@ -1,10 +1,10 @@
 import { Palette, Server, Bot, Info, X } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Modal } from '@/components/ui/Modal'
 import { Toggle } from '@/components/ui/Toggle'
 import { SegCtrl } from '@/components/ui/SegCtrl'
 import { Button } from '@/components/ui/Button'
-import { useAppStore, type AccentColor, type ThemeMode } from '@/stores/app-store'
+import { useAppStore, type AccentColor, type ThemeMode, type LogLevel } from '@/stores/app-store'
 import { useChatStore } from '@/stores/chat-store'
 import { useLlmStore } from '@/stores/llm-store'
 import { PROVIDER_DEFAULTS, type ProviderName } from '@/lib/chat-engine'
@@ -140,25 +140,83 @@ function AppearanceTab() {
 }
 
 function ServerTab() {
+  const { hotReload, logLevel, setHotReload, setLogLevel } = useAppStore()
+  const [loading, setLoading] = useState(true)
+  const [unavailable, setUnavailable] = useState(false)
+
+  // Fetch real settings from mcp-one when the tab mounts
+  useEffect(() => {
+    setLoading(true)
+    fetch('/api/server-settings')
+      .then((r) => r.json())
+      .then((data: { hotReload?: boolean; logLevel?: LogLevel; unavailable?: boolean }) => {
+        if (typeof data.hotReload === 'boolean') setHotReload(data.hotReload)
+        if (data.logLevel) setLogLevel(data.logLevel)
+        setUnavailable(data.unavailable === true)
+      })
+      .catch(() => setUnavailable(true))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const applySettings = async (patch: { hotReload?: boolean; logLevel?: LogLevel }) => {
+    try {
+      const res = await fetch('/api/server-settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+      })
+      if (!res.ok) throw new Error('Failed')
+    } catch {
+      toast.error('Could not apply setting — mcp-one may not be connected')
+    }
+  }
+
+  const handleHotReload = async (v: boolean) => {
+    setHotReload(v)  // optimistic
+    await applySettings({ hotReload: v })
+    toast.info(`Hot reload ${v ? 'enabled' : 'disabled'}`)
+  }
+
+  const handleLogLevel = async (v: LogLevel) => {
+    setLogLevel(v)   // optimistic
+    await applySettings({ logLevel: v })
+    toast.info(`Log level → ${v.toUpperCase()}`)
+  }
+
   return (
     <div>
       <div style={{ fontSize: 9, letterSpacing: '0.16em', color: 'var(--accent)', textTransform: 'uppercase', marginBottom: 16, paddingBottom: 8, borderBottom: '1px solid var(--border)' }}>
         Server
       </div>
 
+      {unavailable && (
+        <div style={{ fontSize: 10, color: 'var(--text-dim)', marginBottom: 12, padding: '6px 10px', background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)', letterSpacing: '0.04em' }}>
+          mcp-one not connected — settings are read-only
+        </div>
+      )}
+
       <SettingRow label="Config directory" sub="Where mcp.*.json files are stored">
         <span style={{ fontSize: 10, color: 'var(--text-dim)', fontFamily: 'monospace' }}>./mcp-configs</span>
       </SettingRow>
 
       <SettingRow label="Hot reload" sub="Auto-reload when config files change">
-        <Toggle checked={true} onChange={() => {}} />
+        <Toggle
+          checked={hotReload}
+          onChange={handleHotReload}
+          disabled={loading || unavailable}
+        />
       </SettingRow>
 
-      <SettingRow label="Log level" sub="Verbosity of server output">
+      <SettingRow label="Log level" sub="Verbosity of mcp-one server output">
         <SegCtrl
-          options={[{ value: 'info', label: 'INFO' }, { value: 'debug', label: 'DEBUG' }, { value: 'error', label: 'ERROR' }]}
-          value="info"
-          onChange={() => {}}
+          options={[
+            { value: 'info' as LogLevel, label: 'INFO' },
+            { value: 'debug' as LogLevel, label: 'DEBUG' },
+            { value: 'error' as LogLevel, label: 'ERROR' },
+          ]}
+          value={logLevel}
+          onChange={handleLogLevel}
+          disabled={loading || unavailable}
         />
       </SettingRow>
     </div>

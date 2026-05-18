@@ -15,6 +15,14 @@ interface StreamCallbacks {
   onUsage?: (usage: TokenUsage) => void
 }
 
+function serverLog(level: 'info' | 'warn' | 'error' | 'debug', msg: string) {
+  fetch('/api/logs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ level, source: 'api', msg })
+  }).catch(() => {})
+}
+
 export async function streamChatCompletion(
   config: ProviderConfig,
   messages: OpenAIMessage[],
@@ -23,6 +31,8 @@ export async function streamChatCompletion(
   signal?: AbortSignal,
 ): Promise<void> {
   let response: Response
+  const startTime = Date.now()
+  serverLog('info', `[LLM] Request started: ${config.model} via ${config.baseUrl}`)
 
   try {
     response = await fetch(`${config.baseUrl}/chat/completions`, {
@@ -37,11 +47,13 @@ export async function streamChatCompletion(
         ...(tools.length > 0 ? { tools, tool_choice: 'auto' } : {}),
         stream: true,
         stream_options: { include_usage: true },
+        max_tokens: 8192,
       }),
       signal,
     })
   } catch (err) {
     if ((err as Error).name === 'AbortError') return
+    serverLog('error', `[LLM] Network error after ${Date.now() - startTime}ms: ${(err as Error).message}`)
     callbacks.onError(err as Error)
     return
   }
@@ -54,12 +66,16 @@ export async function streamChatCompletion(
     } catch { /* ignore */ }
 
     if (response.status === 401) {
+      serverLog('error', `[LLM] API Error 401 after ${Date.now() - startTime}ms: Invalid API key. ${message}`)
       callbacks.onError(new Error(`Invalid API key. ${message}`))
     } else if (response.status === 429) {
+      serverLog('error', `[LLM] API Error 429 after ${Date.now() - startTime}ms: Rate limit exceeded. ${message}`)
       callbacks.onError(new Error(`Rate limit exceeded. ${message}`))
     } else if (response.status === 404) {
+      serverLog('error', `[LLM] API Error 404 after ${Date.now() - startTime}ms: Model not found: ${config.model}. ${message}`)
       callbacks.onError(new Error(`Model not found: ${config.model}. ${message}`))
     } else {
+      serverLog('error', `[LLM] API Error ${response.status} after ${Date.now() - startTime}ms: ${message}`)
       callbacks.onError(new Error(message))
     }
     return
@@ -77,6 +93,7 @@ export async function streamChatCompletion(
   const toolCallAccumulator: Record<number, { id: string; name: string; arguments: string }> = {}
   let hasToolCalls = false
   let buffer = ''
+  let usageTokens: any = null
 
   try {
     while (true) {
@@ -118,6 +135,7 @@ export async function streamChatCompletion(
 
         // Usage chunk arrives after the last delta (choices may be empty)
         if (chunk.usage && callbacks.onUsage) {
+          usageTokens = chunk.usage
           callbacks.onUsage({
             input: chunk.usage.prompt_tokens,
             output: chunk.usage.completion_tokens,
@@ -149,6 +167,12 @@ export async function streamChatCompletion(
           }
         }
 
+        // Explicitly handle output truncation
+        if (choice.finish_reason === 'length') {
+          callbacks.onError(new Error("Generation stopped early because the model reached its output token limit (max_tokens). The output was truncated."));
+          return;
+        }
+
         // When finish_reason arrives, emit accumulated tool calls
         if (choice.finish_reason === 'tool_calls' || (choice.finish_reason === 'stop' && hasToolCalls)) {
           const calls: ToolCallRequest[] = Object.values(toolCallAccumulator).map((tc) => ({
@@ -164,9 +188,14 @@ export async function streamChatCompletion(
     }
   } catch (err) {
     if ((err as Error).name === 'AbortError') return
+    serverLog('error', `[LLM] Streaming error after ${Date.now() - startTime}ms: ${(err as Error).message}`)
     callbacks.onError(err as Error)
     return
   }
+
+  const duration = Date.now() - startTime
+  const usageStr = usageTokens ? ` (Tokens: In=${usageTokens.prompt_tokens}, Out=${usageTokens.completion_tokens}, Total=${usageTokens.total_tokens})` : ''
+  serverLog('info', `[LLM] Request completed in ${duration}ms${usageStr}`)
 
   callbacks.onDone()
 }

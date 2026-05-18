@@ -60,14 +60,22 @@ function makeDebouncer() {
  * @param registry           Live ToolRegistry from startServer()
  * @param notifyToolsChanged Broadcasts tool-list-changed to all active transports
  */
+export interface WatcherHandle {
+  pause(): void;
+  resume(): void;
+  isPaused(): boolean;
+}
+
 export function startWatcher(
   configDir: string,
   registry: ToolRegistry,
   notifyToolsChanged: () => Promise<void>,
-): void {
+): WatcherHandle {
   // Track which file owns which configId so we can unregister on unlink
   // without being able to read the deleted file.
   const fileToConfigId = new Map<string, string>();
+
+  let paused = false;
 
   const debounce = makeDebouncer();
 
@@ -82,6 +90,7 @@ export function startWatcher(
   watcher.on("add", (filePath) => {
     if (!isMcpConfigFile(filePath)) return;
     debounce(filePath, async () => {
+      if (paused) return;
       console.error(`[watcher] + ${path.basename(filePath)}`);
 
       const config = loadSingleConfig(filePath);
@@ -138,6 +147,7 @@ export function startWatcher(
   watcher.on("change", (filePath) => {
     if (!isMcpConfigFile(filePath)) return;
     debounce(filePath, async () => {
+      if (paused) return;
       console.error(`[watcher] ~ ${path.basename(filePath)}`);
 
       // Remove previous version of this config
@@ -204,6 +214,7 @@ export function startWatcher(
   watcher.on("unlink", (filePath) => {
     if (!isMcpConfigFile(filePath)) return;
     debounce(filePath, async () => {
+      if (paused) return;
       const configId = fileToConfigId.get(filePath);
       if (!configId) return;
 
@@ -236,4 +247,18 @@ export function startWatcher(
       console.error(`[env] Reloaded .env (${count} var(s) loaded)`);
     });
   });
+
+  return {
+    pause(): void {
+      paused = true;
+      console.error("[watcher] Hot reload paused");
+    },
+    resume(): void {
+      paused = false;
+      console.error("[watcher] Hot reload resumed");
+    },
+    isPaused(): boolean {
+      return paused;
+    },
+  };
 }

@@ -12,6 +12,12 @@ export interface ConnectorSummary {
   base_url?: string
   endpoint?: string
   transport?: string
+  // SQL specific
+  dialect?: string
+  host?: string
+  port?: number
+  database?: string
+  connection_string_env?: string
 }
 
 export interface ConfigSummary {

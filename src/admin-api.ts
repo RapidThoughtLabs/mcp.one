@@ -3,6 +3,7 @@ import path from "node:path";
 import { Router } from "express";
 import { validateConfig } from "./loader.js";
 import { loadEnvFile } from "./lib/env-writer.js";
+import { log } from "./lib/logger.js";
 import { CONNECTOR_TYPES, isConnectorType } from "./lib/connector-types.js";
 import {
   RESERVED_IDS,
@@ -27,10 +28,79 @@ function buildInputSchema(params: ParamDef[]): Record<string, unknown> {
 export interface AdminContext {
   configDir: string;
   registry: { list(): RegisteredTool[] };
+  watcher: { pause(): void; resume(): void; isPaused(): boolean } | null;
 }
+
+// ── In-memory server settings ─────────────────────────────────────
+// These reset to defaults on process restart, which is intentional.
+// The --debug CLI flag is the durable way to boot with debug logging.
+
+type LogLevel = "debug" | "info" | "warn" | "error";
+
+const VALID_LOG_LEVELS: LogLevel[] = ["debug", "info", "warn", "error"];
+
+const serverSettings: { hotReload: boolean; logLevel: LogLevel } = {
+  hotReload: true,
+  logLevel: "info",
+};
 
 export function createAdminRouter(ctx: AdminContext): Router {
   const router = Router();
+
+  // ── GET /admin/server-settings ───────────────────────────────────
+  // Returns current runtime server settings (hot reload + log level).
+
+  router.get("/server-settings", (_req, res) => {
+    res.json({
+      hotReload: ctx.watcher ? !ctx.watcher.isPaused() : serverSettings.hotReload,
+      logLevel: serverSettings.logLevel,
+    });
+  });
+
+  // ── POST /admin/server-settings ──────────────────────────────────
+  // Accepts { hotReload?: boolean, logLevel?: string } and applies them live.
+
+  router.post("/server-settings", (req, res) => {
+    const body = req.body as { hotReload?: unknown; logLevel?: unknown };
+    const errors: string[] = [];
+
+    if (body.hotReload !== undefined) {
+      if (typeof body.hotReload !== "boolean") {
+        errors.push('"hotReload" must be a boolean');
+      } else {
+        serverSettings.hotReload = body.hotReload;
+        if (ctx.watcher) {
+          if (body.hotReload) {
+            ctx.watcher.resume();
+          } else {
+            ctx.watcher.pause();
+          }
+        }
+      }
+    }
+
+    if (body.logLevel !== undefined) {
+      if (!VALID_LOG_LEVELS.includes(body.logLevel as LogLevel)) {
+        errors.push(`"logLevel" must be one of: ${VALID_LOG_LEVELS.join(", ")}`);
+      } else {
+        serverSettings.logLevel = body.logLevel as LogLevel;
+        log.setConsoleLevel(body.logLevel as LogLevel);
+      }
+    }
+
+    if (errors.length > 0) {
+      res.status(400).json({ error: errors.join("; ") });
+      return;
+    }
+
+    res.json({
+      ok: true,
+      settings: {
+        hotReload: ctx.watcher ? !ctx.watcher.isPaused() : serverSettings.hotReload,
+        logLevel: serverSettings.logLevel,
+      },
+    });
+  });
 
   // GET /admin/tools — all registered tools across all configs (unfiltered)
   router.get("/tools", (_req, res) => {

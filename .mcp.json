@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "mcp-one": {
-      "command": "node",
-      "args": ["dist/cli.js", "start"],
-      "cwd": "/Users/ruchitnannavare/GitHub/RapidThoughtLabs/mcp.one"
-    }
-  }
-}

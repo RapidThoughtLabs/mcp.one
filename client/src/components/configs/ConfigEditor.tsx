@@ -461,7 +461,7 @@ export function ConfigEditor({ config, updateConfig, deleteConfig, onClose }: Co
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 28 }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '24px 24px 48px', display: 'flex', flexDirection: 'column', gap: 28 }}>
         {/* ── Service Basics ── */}
         <Section title="Service Basics">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 12 }}>
