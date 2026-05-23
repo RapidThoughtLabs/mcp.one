@@ -62,6 +62,24 @@ export const INTERNAL_CONFIG: McpConfig = {
       ],
     },
     {
+      name: "invoke",
+      description: "Execute any registered tool by its qualified name (config_id.tool_name). Use after one.search or one.list_tools to run the tool you found. Works for all service tools (open-meteo-http.get_forecast, github-http.create_issue, etc.) and all one.* self-management tools.",
+      params: [
+        {
+          name: "tool",
+          type: "string",
+          required: true,
+          description: "Qualified tool name in the format config_id.tool_name (e.g. 'open-meteo-http.get_forecast', 'github-http.create_issue', 'one.server_status')"
+        },
+        {
+          name: "args",
+          type: "object",
+          required: false,
+          description: "Arguments for the tool, as an object matching its parameter schema. Omit or pass {} for tools with no required params."
+        }
+      ]
+    },
+    {
       name: "update_config",
       description: "Update an existing config's name, description, or connector settings. Changes are hot-reloaded automatically.",
       params: [

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import type { McpConfig, McpConnectorConfig } from "./types.js";
+import { PKG_NAME } from "./lib/version.js";
 
 const SCAN_PATHS = [
   // Claude Desktop (macOS)
@@ -32,6 +33,16 @@ export function discoverMcpServers(): McpConfig[] {
       const servers = parseMcpClientConfig(raw);
 
       for (const srv of servers) {
+        // Skip entries that would spawn another mcp-one process — prevents
+        // an infinite recursive spawn loop when mcp-one itself is listed in
+        // the client config it is reading (e.g. Cursor's mcp.json).
+        if (isSelfReferential(srv)) {
+          console.error(
+            `[discovery] Skipped: ${srv.id} — would spawn another ${PKG_NAME} process (recursive loop prevention)`,
+          );
+          continue;
+        }
+
         const id = `${srv.id}-mcp`; // D1: always append connector type suffix
         if (seenIds.has(id)) continue;
         seenIds.add(id);
@@ -60,6 +71,35 @@ export function discoverMcpServers(): McpConfig[] {
   }
 
   return discovered;
+}
+
+/**
+ * Returns true if the discovered server entry would launch another instance
+ * of this package, which would cause an infinite recursive spawn loop.
+ *
+ * Detection uses exact token equality (not substring) to avoid false positives
+ * on packages whose names merely contain the package name (e.g. "mcp-one-extra").
+ *
+ * Checks (in order):
+ *   1. Any arg token exactly equals PKG_NAME   → covers: npx [-y] mcp-one start
+ *   2. Command basename (without .cmd) equals PKG_NAME
+ *                                              → covers: mcp-one start (global install)
+ *                                                        mcp-one.cmd start (Windows)
+ *                                                        /usr/local/bin/mcp-one start
+ *
+ * Exported for unit testing only — not part of the public API.
+ */
+export function isSelfReferential(srv: DiscoveredServer): boolean {
+  // Tier 1: any token in [command, ...args] exactly equals the package name
+  const allTokens = [srv.command, ...(srv.args ?? [])];
+  if (allTokens.some((t) => t === PKG_NAME)) return true;
+
+  // Tier 2: command basename matches the binary name (handles absolute paths
+  // and Windows .cmd wrappers)
+  const base = path.basename(srv.command, ".cmd");
+  if (base === PKG_NAME) return true;
+
+  return false;
 }
 
 function parseMcpClientConfig(raw: unknown): DiscoveredServer[] {

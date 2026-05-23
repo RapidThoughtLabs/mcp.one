@@ -103,11 +103,11 @@ function makeServer(
 
   // ── tools/list ────────────────────────────────────────────────
 
-  const DISCOVERY_TRIO = new Set(["one.search", "one.list_tools", "one.list_configs"]);
+  const DISCOVERY_QUAD = new Set(["one.search", "one.list_tools", "one.list_configs", "one.invoke"]);
 
   server.setRequestHandler(ListToolsRequestSchema, () => {
     const visible = registry.list().filter((rt) =>
-      DISCOVERY_TRIO.has(`${rt.configId}.${rt.tool.name}`),
+      DISCOVERY_QUAD.has(`${rt.configId}.${rt.tool.name}`),
     );
     const tools = visible.map((rt) => ({
       name: `${rt.configId}.${rt.tool.name}`,

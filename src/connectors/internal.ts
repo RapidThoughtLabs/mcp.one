@@ -104,6 +104,10 @@ import {
   handleSearch,
 } from "./internal-handlers/search-ops.js";
 
+import {
+  handleInvoke,
+} from "./internal-handlers/invoke-ops.js";
+
 const HANDLERS: Record<string, Handler> = {
   // Config CRUD
   create_config:   handleCreateConfig,
@@ -135,4 +139,5 @@ const HANDLERS: Record<string, Handler> = {
 
   // Discovery
   search: handleSearch,
+  invoke: handleInvoke,
 };
