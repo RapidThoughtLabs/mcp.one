@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { ConfigSummary, McpTool } from '@/types/server'
 
 export type Page = 'demo' | 'configs' | 'registry' | 'logs' | 'prompts'
-export type AccentColor = 'purple' | 'lime' | 'blue' | 'cyan' | 'pink'
+export type AccentColor = 'purple' | 'lime' | 'blue' | 'cyan' | 'pink' | 'yellow'
 export type ThemeMode = 'dark' | 'light'
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 

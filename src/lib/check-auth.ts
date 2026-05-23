@@ -1,5 +1,6 @@
 import type { AuthConfig, McpConfig, HttpConnectorConfig, GrpcConnectorConfig, GraphqlConnectorConfig } from "../types.js";
 import { checkAuthEnvVars } from "../auth/index.js";
+import { resolveEnv } from "./env-store.js";
 
 // ── Connector-aware helpers ────────────────────────────────────────
 
@@ -36,20 +37,20 @@ export interface AuthVarStatus {
  * Returns per-variable presence status for every env var an auth block references.
  * Used by `mcp-one auth status` to display a per-variable health table.
  */
-export function getAuthVarStatuses(auth: AuthConfig): AuthVarStatus[] {
+export function getAuthVarStatuses(auth: AuthConfig, configId: string): AuthVarStatus[] {
   switch (auth.type) {
     case "bearer":
     case "oauth2_static":
-      return [{ name: auth.token_env, set: !!process.env[auth.token_env] }];
+      return [{ name: auth.token_env, set: !!resolveEnv(configId, auth.token_env) }];
 
     case "basic":
       return [
-        { name: auth.username_env, set: !!process.env[auth.username_env] },
-        { name: auth.token_env,    set: !!process.env[auth.token_env] },
+        { name: auth.username_env, set: !!resolveEnv(configId, auth.username_env) },
+        { name: auth.token_env,    set: !!resolveEnv(configId, auth.token_env) },
       ];
 
     case "api_key":
-      return [{ name: auth.key_env, set: !!process.env[auth.key_env] }];
+      return [{ name: auth.key_env, set: !!resolveEnv(configId, auth.key_env) }];
   }
 }
 

@@ -1,4 +1,5 @@
 import { CONNECTOR_TYPES } from "./connector-types.js";
+import { resolveEnv } from "./env-store.js";
 
 export const RESERVED_IDS = ["one"];
 
@@ -63,7 +64,7 @@ export function collectAuthEnvVars(config: unknown): Set<string> {
   return vars;
 }
 
-export function getMissingAuthVars(auth: unknown): string[] {
+export function getMissingAuthVars(auth: unknown, configId: string): string[] {
   if (!auth || typeof auth !== "object") return [];
   const a = auth as Record<string, unknown>;
   const candidates: string[] = [];
@@ -75,7 +76,7 @@ export function getMissingAuthVars(auth: unknown): string[] {
   } else if (a["type"] === "api_key") {
     if (typeof a["key_env"] === "string") candidates.push(a["key_env"]);
   }
-  return candidates.filter((v) => !process.env[v]);
+  return candidates.filter((v) => !resolveEnv(configId, v));
 }
 
 export function toConfigSummary(raw: Record<string, unknown>, toolCount: number): ConfigSummary {
@@ -96,7 +97,7 @@ export function toConfigSummary(raw: Record<string, unknown>, toolCount: number)
   let auth: AuthStatus | undefined;
   if (connRaw["type"] === "http" || connRaw["type"] === "graphql") {
     const authData = connRaw["auth"];
-    const missingVars = getMissingAuthVars(authData);
+    const missingVars = getMissingAuthVars(authData, id);
     auth = {
       type:
         typeof authData === "object" && authData

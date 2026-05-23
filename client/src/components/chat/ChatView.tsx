@@ -97,7 +97,7 @@ export function ChatView() {
         {/* Connection status */}
         {isConnected ? (
           <>
-            <Badge variant="online">
+            <Badge variant="online" style={{ padding: '5px 10px' }}>
               <Zap size={8} style={{ marginRight: 4 }} />
               {provider!.provider}
             </Badge>

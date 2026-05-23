@@ -3,10 +3,6 @@ import cors from "cors";
 import { createMcpClient } from "./mcp-client.js";
 import { createApiRouter } from "./api.js";
 import { createRegistryRouter } from "./registry-api.js";
-import { loadEnvFile } from "../src/lib/env-writer.js";
-
-// Load .env into process.env so auth status checks see previously saved credentials.
-loadEnvFile();
 
 const PORT = Number(process.env["PORT"] ?? 3456);
 

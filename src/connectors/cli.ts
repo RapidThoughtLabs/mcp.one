@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import type { CliConnectorConfig, RegisteredTool, ToolDef } from "../types.js";
 import type { IConnector, ConnectorResult } from "./base.js";
+import { buildChildEnv } from "../lib/env-store.js";
 
 export class CliConnector implements IConnector {
   readonly type = "cli" as const;
@@ -14,7 +15,7 @@ export class CliConnector implements IConnector {
     return new Promise((resolve, reject) => {
       const child = spawn(cmd, cmdArgs, {
         cwd: config.cwd,
-        env: { ...process.env, ...config.env },
+        env: buildChildEnv(tool.configId, config.env),
         shell: config.shell ?? true,
         timeout,
       });

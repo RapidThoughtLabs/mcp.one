@@ -1,9 +1,4 @@
 #!/usr/bin/env node
-import { loadEnvFile } from "./lib/env-writer.js";
-
-// Load .env at startup; skip vars already set in the shell environment
-loadEnvFile();
-
 // Static imports — tsup (splitting: false, noExternal) bundles into one file.
 // Dynamic imports would produce unresolvable paths in the bundle.
 import { run as runStart } from "./commands/start.js";

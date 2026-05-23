@@ -1,76 +1,12 @@
-import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
+import os from "node:os";
 import { Router } from "express";
 import type { McpClientInstance } from "./mcp-client.js";
 import { createAdminClient, AdminUnavailableError } from "./mcp-admin.js";
 import { loadManifest, loadRegistries } from "../src/registry/auth.js";
-
-// ── Credential writer ─────────────────────────────────────────────
-// Writes env vars to ~/.mcp-one.env (home-relative, same as src/lib/env-writer)
-// and immediately loads them into process.env so mcp-one picks them up.
-
-const ENV_PATH = path.join(os.homedir(), ".mcp-one.env");
-
-function writeCredentials(
-  serviceId: string,
-  entries: { key: string; value: string }[],
-  overwrite = false,
-): string[] {
-  const valid = entries.filter((e) => e.value.trim().length > 0);
-  if (valid.length === 0) return [];
-
-  const existing = fs.existsSync(ENV_PATH) ? fs.readFileSync(ENV_PATH, "utf-8") : "";
-  const lines = existing ? existing.split(/\r?\n/) : [];
-
-  // Strip trailing blank lines
-  while (lines.length > 0 && lines[lines.length - 1].trim() === "") lines.pop();
-
-  const written: string[] = [];
-  const toAppend: { key: string; value: string }[] = [];
-
-  for (const { key, value } of valid) {
-    const idx = lines.findIndex((l) => {
-      const t = l.trim();
-      if (t.startsWith("#") || !t.includes("=")) return false;
-      return t.slice(0, t.indexOf("=")).trim() === key;
-    });
-
-    if (idx !== -1 && overwrite) {
-      lines[idx] = `${key}=${value}`;
-      written.push(key);
-    } else if (idx === -1) {
-      toAppend.push({ key, value });
-    }
-    // idx !== -1 && !overwrite → skip (already set)
-  }
-
-  let result = lines.join("\n");
-  if (toAppend.length > 0) {
-    if (result.length > 0) result += "\n\n";
-    result += `# ${serviceId} (added via mcp-one UI)\n`;
-    for (const { key, value } of toAppend) {
-      result += `${key}=${value}\n`;
-      written.push(key);
-    }
-  } else if (written.length > 0) {
-    result += "\n";
-  }
-
-  if (written.length > 0) {
-    fs.writeFileSync(ENV_PATH, result, "utf-8");
-  }
-
-  // Always mirror submitted values into process.env, even when the file
-  // write was skipped (key already present, overwrite=false). Without
-  // this, a save can be a no-op on disk AND leave process.env empty,
-  // causing the auth card to stay red forever.
-  for (const { key, value } of valid) {
-    process.env[key] = value;
-  }
-
-  return written;
-}
+import { writeConfigEnv } from "../src/lib/env-writer.js";
+import { loadSystemConfig } from "../src/system-config.js";
+import { resolveConfigDir } from "../src/lib/resolve-config-dir.js";
 
 // ─────────────────────────────────────────────────────────────────
 
@@ -390,12 +326,13 @@ export function createApiRouter(mcp: McpClientInstance): Router {
     }
 
     try {
-      const written = writeCredentials(configId, entries, overwrite);
-      mcp.addLog("info", "api", `Credentials saved for: ${configId} (${written.join(", ")})`);
-      // Fire-and-forget: tell mcp-one to reload .env so getMissingAuthVars() sees the new values.
-      // Failure is non-fatal — the file is already written; mcp-one will pick it up on restart.
-      admin.post("/reload-env", {}).catch(() => {});
-      res.json({ ok: true, written });
+      const systemConfig = loadSystemConfig(process.cwd());
+      const configDir = resolveConfigDir(undefined, systemConfig);
+      const result = writeConfigEnv(configDir, configId, entries, overwrite);
+      mcp.addLog("info", "api", `Credentials saved for: ${configId} (${result.written.join(", ")})`);
+      // Tell mcp-one to reload this config's env so auth checks see the new values immediately.
+      admin.post("/reload-env", { configId }).catch(() => {});
+      res.json({ ok: true, written: result.written, skipped: result.skipped });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
     }

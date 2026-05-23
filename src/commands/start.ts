@@ -8,7 +8,7 @@ import { checkAuthEnvVars } from "../auth/index.js";
 import { resolveConfigDir } from "../lib/resolve-config-dir.js";
 import { VERSION } from "../lib/version.js";
 import { log } from "../lib/logger.js";
-import { loadEnvFile } from "../lib/env-writer.js";
+import { loadAllConfigEnvs } from "../lib/env-store.js";
 import { INTERNAL_CONFIG } from "../internal-config.js";
 import { connectorRegistry } from "../connectors/registry.js";
 import { HttpConnector } from "../connectors/http.js";
@@ -37,14 +37,14 @@ function authStatus(config: McpConfig): string {
   if (config.connector.type === "http") {
     const auth = (config.connector as HttpConnectorConfig).auth;
     if (!auth) return "";
-    const missing = checkAuthEnvVars(auth);
+    const missing = checkAuthEnvVars(auth, config.id);
     if (missing.length === 0) return "✅";
     return `⚠️  missing: ${missing.join(", ")}`;
   }
   if (config.connector.type === "graphql") {
     const gql = config.connector as GraphqlConnectorConfig;
     if (!gql.auth) return "";
-    const missing = checkAuthEnvVars(gql.auth);
+    const missing = checkAuthEnvVars(gql.auth, config.id);
     if (missing.length === 0) return "✅";
     return `⚠️  missing: ${missing.join(", ")}`;
   }
@@ -58,9 +58,6 @@ export async function run(args: string[]): Promise<void> {
   const portIndex = args.indexOf("--port");
   const portArg = portIndex !== -1 ? parseInt(args[portIndex + 1] ?? "3333", 10) : 3333;
   const port = isNaN(portArg) ? 3333 : portArg;
-
-  // Load .env so auth env vars are available when checking missing credentials.
-  loadEnvFile();
 
   // ── Initialize logger ──────────────────────────────────────────
   log.init({ debug: debugMode });
@@ -78,6 +75,9 @@ export async function run(args: string[]): Promise<void> {
     fs.mkdirSync(configDir, { recursive: true });
     log.info("server", `Created config dir: ${configDir}`);
   }
+
+  // Load per-config secrets before any auth status checks or connector init
+  loadAllConfigEnvs(configDir);
 
   // ── Register connectors ──────────────────────────────────────────
 
@@ -266,7 +266,7 @@ export async function run(args: string[]): Promise<void> {
     (c) =>
       c.connector.type === "http" &&
       (c.connector as HttpConnectorConfig).auth !== undefined &&
-      checkAuthEnvVars((c.connector as HttpConnectorConfig).auth!).length > 0,
+      checkAuthEnvVars((c.connector as HttpConnectorConfig).auth!, c.id).length > 0,
   );
   if (unconfigured.length > 0) {
     log.raw(`  ⚠️  ${unconfigured.length} config(s) have missing auth. Affected tools will return a structured error when called.`);

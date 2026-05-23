@@ -13,7 +13,7 @@ export interface RunInstallOpts {
   command: string;
   args?: string[];
   cwd?: string;
-  env?: Record<string, string>;
+  env: Record<string, string>;
   timeoutMs: number;
   onLine?: (line: string, stream: "stdout" | "stderr") => void;
 }
@@ -34,13 +34,13 @@ export async function runInstall(opts: RunInstallOpts): Promise<InstallResult> {
   const child = args !== undefined
     ? spawn(command, args, {
         cwd,
-        env: { ...process.env, ...env },
+        env,
         stdio: ["ignore", "pipe", "pipe"],
         shell: false,
       })
     : spawn(command, [], {
         cwd,
-        env: { ...process.env, ...env },
+        env,
         stdio: ["ignore", "pipe", "pipe"],
         shell: true,
       });

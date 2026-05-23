@@ -3,7 +3,7 @@
  */
 
 import { getConfigAuth, checkAuthEnvVars, getAuthVarStatuses } from "../../lib/check-auth.js";
-import { appendEnvVars } from "../../lib/env-writer.js";
+import { writeConfigEnv } from "../../lib/env-writer.js";
 import type { ConnectorResult } from "../base.js";
 import type { InternalContext } from "../internal.js";
 
@@ -23,8 +23,8 @@ export async function handleAuthStatus(
       const auth = getConfigAuth(c);
       if (!auth) return { config_id: c.id, auth: false, status: "no_auth_required" };
 
-      const missing  = checkAuthEnvVars(auth);
-      const varStatus = getAuthVarStatuses(auth);
+      const missing  = checkAuthEnvVars(auth, c.id);
+      const varStatus = getAuthVarStatuses(auth, c.id);
 
       return {
         config_id:    c.id,
@@ -53,25 +53,29 @@ export async function handleAuthStatus(
 }
 
 export async function handleAuthSet(
-  _ctx: InternalContext,
+  ctx: InternalContext,
   args: Record<string, unknown>,
 ): Promise<ConnectorResult> {
-  const key   = args.key   as string | undefined;
-  const value = args.value as string | undefined;
+  const configId = args.config_id as string | undefined;
+  const key      = args.key       as string | undefined;
+  const value    = args.value     as string | undefined;
 
-  if (!key   || typeof key   !== "string" || key.trim()   === "") {
+  if (!configId || typeof configId !== "string" || configId.trim() === "") {
+    return { success: false, data: { error: "config_id is required and must be a non-empty string" } };
+  }
+  if (!key || typeof key !== "string" || key.trim() === "") {
     return { success: false, data: { error: "key is required and must be a non-empty string" } };
   }
   if (value === undefined || value === null) {
     return { success: false, data: { error: "value is required" } };
   }
 
-  const result = appendEnvVars("mcp-one", [{ key, value: String(value) }], true);
+  const result = writeConfigEnv(ctx.configDir, configId, [{ key, value: String(value) }], true);
 
   if (result.written.includes(key)) {
     return {
       success: true,
-      data: { key, message: `${key} written to .env and loaded into process.env.` },
+      data: { key, config_id: configId, message: `${key} written to mcp.${configId}.env.` },
     };
   }
 

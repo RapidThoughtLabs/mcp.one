@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Router } from "express";
 import { validateConfig } from "./loader.js";
-import { loadEnvFile } from "./lib/env-writer.js";
+import { loadConfigEnv } from "./lib/env-store.js";
 import { log } from "./lib/logger.js";
 import { CONNECTOR_TYPES, isConnectorType } from "./lib/connector-types.js";
 import {
@@ -249,12 +249,17 @@ export function createAdminRouter(ctx: AdminContext): Router {
     res.json({ ok: true });
   });
 
-  // POST /admin/reload-env — reload .env into mcp-one's process.env
-  // Called by the Express bridge after credentials are written to disk,
-  // so getMissingAuthVars() sees the new values immediately.
-  router.post("/reload-env", (_req, res) => {
-    const count = loadEnvFile(true);
-    res.json({ ok: true, updated: count });
+  // POST /admin/reload-env — reload a config's secrets file into the env store.
+  // Called by the Express bridge after credentials are written to disk.
+  router.post("/reload-env", (req, res) => {
+    const { configId } = req.body as { configId?: string };
+    if (!configId || typeof configId !== "string") {
+      res.status(400).json({ error: "configId is required" });
+      return;
+    }
+    const filePath = path.join(ctx.configDir, `mcp.${configId}.env`);
+    const count = loadConfigEnv(configId, filePath);
+    res.json({ ok: true, configId, updated: count });
   });
 
   // DELETE /admin/configs/:id — delete config file

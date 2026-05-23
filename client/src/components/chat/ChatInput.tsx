@@ -163,14 +163,14 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled }: ChatInputPr
               background: 'var(--bg)',
               border: '1px solid var(--border2)',
               borderRadius: 8,
-              padding: '10px 14px',
+              padding: '8px 14px',
               color: 'var(--text)',
               fontSize: 12,
               fontFamily: "'JetBrains Mono', monospace",
               outline: 'none',
               resize: 'none',
               lineHeight: 1.5,
-              minHeight: 40,
+              minHeight: 36,
               maxHeight: 120,
               transition: 'border-color 0.15s, box-shadow 0.2s',
               letterSpacing: '0.02em',
@@ -193,23 +193,19 @@ export function ChatInput({ onSend, onStop, isStreaming, disabled }: ChatInputPr
         {isStreaming ? (
           <Button
             variant="cancel"
-            size="pill"
             onClick={onStop}
-            style={{ flexShrink: 0, gap: 6 }}
+            style={{ flexShrink: 0, width: 36, height: 36, borderRadius: '50%', padding: 0 }}
           >
-            <Square size={10} />
-            Stop
+            <Square size={12} />
           </Button>
         ) : (
           <Button
             variant="primary"
-            size="pill"
             disabled={!canSend}
             onClick={handleSend}
-            style={{ flexShrink: 0, gap: 6 }}
+            style={{ flexShrink: 0, width: 36, height: 36, borderRadius: '50%', padding: 0 }}
           >
-            <Send size={12} />
-            Send
+            <Send size={14} />
           </Button>
         )}
       </div>

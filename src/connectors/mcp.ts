@@ -5,6 +5,7 @@ import type { McpConnectorConfig, RegisteredTool, ToolDef, ParamDef } from "../t
 import type { IConnector, ConnectorResult } from "./base.js";
 import { runInstall } from "../lib/install-runner.js";
 import { fingerprintInstall, readSentinel, writeSentinel } from "../lib/install-state.js";
+import { buildChildEnv } from "../lib/env-store.js";
 
 interface McpChild {
   client: Client;
@@ -110,7 +111,7 @@ export class McpConnector implements IConnector {
       transport = new StdioClientTransport({
         command: config.command!,
         args: config.args,
-        env: { ...process.env, ...config.env } as Record<string, string>,
+        env: buildChildEnv(configId, config.env),
       });
     } else {
       transport = new SSEClientTransport(new URL(config.url!));
@@ -143,6 +144,7 @@ export class McpConnector implements IConnector {
         configId,
         command: config.install_check_command,
         timeoutMs: 30_000,
+        env: buildChildEnv(configId),
       });
       if (probe.success) {
         writeSentinel({
@@ -163,7 +165,7 @@ export class McpConnector implements IConnector {
       command: config.install_command!,
       args: config.install_args,
       cwd: config.install_cwd,
-      env: config.install_env,
+      env: buildChildEnv(configId, config.install_env),
       timeoutMs: config.install_timeout_ms ?? 600_000,
       onLine: (line, stream) => {
         console.error(`[mcp-install:${configId}] ${stream === "stderr" ? "!" : ">"} ${line}`);

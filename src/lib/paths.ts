@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 
-function stateDir(): string {
+export function stateDir(): string {
   return process.env.MCP_ONE_STATE_DIR ?? path.join(os.homedir(), ".mcp-one", "state");
 }
 

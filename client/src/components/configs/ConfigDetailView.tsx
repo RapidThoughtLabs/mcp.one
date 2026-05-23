@@ -293,8 +293,18 @@ export function ConfigDetailView({ cfg, onClose }: { cfg: ConfigSummary; onClose
               <button
                 onClick={() => setRawOpen((v) => !v)}
                 style={{
-                  display: 'flex', alignItems: 'center', gap: 6, background: 'transparent',
-                  border: 'none', cursor: 'pointer', padding: 0, marginBottom: rawOpen ? 8 : 0,
+                  display: 'inline-flex', alignItems: 'center', gap: 6,
+                  background: 'var(--surface2)', border: '1px solid var(--border)',
+                  borderRadius: 5, cursor: 'pointer', padding: '5px 10px',
+                  marginBottom: rawOpen ? 8 : 0, transition: 'background 0.1s, border-color 0.1s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--surface3, rgba(255,255,255,0.06))'
+                  e.currentTarget.style.borderColor = 'var(--border-mid, var(--accent))'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'var(--surface2)'
+                  e.currentTarget.style.borderColor = 'var(--border)'
                 }}
               >
                 <Code2 size={11} style={{ color: 'var(--text-dim)' }} />

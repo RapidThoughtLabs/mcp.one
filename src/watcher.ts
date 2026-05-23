@@ -1,7 +1,6 @@
-import fs from "node:fs";
 import path from "node:path";
 import { watch } from "chokidar";
-import { loadEnvFile } from "./lib/env-writer.js";
+import { loadConfigEnv, unloadConfigEnv } from "./lib/env-store.js";
 import type { ToolRegistry } from "./server.js";
 import { loadSingleConfig } from "./loader.js";
 import { connectorRegistry } from "./connectors/registry.js";
@@ -23,6 +22,18 @@ const DEBOUNCE_MS = 300;
 function isMcpConfigFile(filePath: string): boolean {
   const base = path.basename(filePath);
   return base.startsWith("mcp.") && base.endsWith(".json") && base !== "mcp.one.json";
+}
+
+/** Returns true if the path looks like a per-config secrets file (mcp.*.env). */
+function isMcpEnvFile(filePath: string): boolean {
+  const base = path.basename(filePath);
+  return base.startsWith("mcp.") && base.endsWith(".env");
+}
+
+/** Extract configId from a mcp.{configId}.env filename. */
+function configIdFromEnvFile(filePath: string): string {
+  const base = path.basename(filePath); // "mcp.github-graphql.env"
+  return base.slice(4, -4);             // "github-graphql"
 }
 
 function makeDebouncer() {
@@ -88,6 +99,14 @@ export function startWatcher(
 
   // ── add ────────────────────────────────────────────────────────
   watcher.on("add", (filePath) => {
+    if (isMcpEnvFile(filePath)) {
+      debounce(filePath, () => {
+        const configId = configIdFromEnvFile(filePath);
+        const count = loadConfigEnv(configId, filePath);
+        console.error(`[watcher] + ${path.basename(filePath)} (${count} var(s))`);
+      });
+      return;
+    }
     if (!isMcpConfigFile(filePath)) return;
     debounce(filePath, async () => {
       if (paused) return;
@@ -145,6 +164,14 @@ export function startWatcher(
 
   // ── change ─────────────────────────────────────────────────────
   watcher.on("change", (filePath) => {
+    if (isMcpEnvFile(filePath)) {
+      debounce(filePath, () => {
+        const configId = configIdFromEnvFile(filePath);
+        const count = loadConfigEnv(configId, filePath);
+        console.error(`[watcher] ~ ${path.basename(filePath)} (${count} var(s))`);
+      });
+      return;
+    }
     if (!isMcpConfigFile(filePath)) return;
     debounce(filePath, async () => {
       if (paused) return;
@@ -212,6 +239,14 @@ export function startWatcher(
 
   // ── unlink ─────────────────────────────────────────────────────
   watcher.on("unlink", (filePath) => {
+    if (isMcpEnvFile(filePath)) {
+      debounce(filePath, () => {
+        const configId = configIdFromEnvFile(filePath);
+        unloadConfigEnv(configId);
+        console.error(`[watcher] - ${path.basename(filePath)}`);
+      });
+      return;
+    }
     if (!isMcpConfigFile(filePath)) return;
     debounce(filePath, async () => {
       if (paused) return;
@@ -233,21 +268,6 @@ export function startWatcher(
   });
 
   console.error(`[mcp-one] Watching ${configDir} for config changes`);
-
-  // ── .env hot-reload ────────────────────────────────────────────
-  // Watch the .env file with fs.watchFile (poll-based — handles non-existent
-  // files gracefully, no extra chokidar watcher needed for a single file).
-  const envPath = path.join(process.cwd(), ".env");
-  const envDebounce = makeDebouncer();
-
-  fs.watchFile(envPath, { interval: 2000 }, (curr, prev) => {
-    if (curr.mtimeMs === prev.mtimeMs) return; // no actual change (initial poll)
-    envDebounce(".env", () => {
-      const count = loadEnvFile(true); // override = true: .env wins over shell env
-      console.error(`[env] Reloaded .env (${count} var(s) loaded)`);
-    });
-  });
-
   return {
     pause(): void {
       paused = true;

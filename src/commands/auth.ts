@@ -6,7 +6,8 @@ import { resolveConfigDir } from "../lib/resolve-config-dir.js";
 import { checkAuthEnvVars, getAuthVarStatuses, getAuthVarNames, getConfigAuth, getConfigBaseUrl } from "../lib/check-auth.js";
 import { bold, green, red, yellow, dim, cyan } from "../lib/fmt.js";
 import { ask, askMasked, confirm } from "../lib/prompt.js";
-import { appendEnvVars, isEnvInGitignore } from "../lib/env-writer.js";
+import { writeConfigEnv, isEnvInGitignore } from "../lib/env-writer.js";
+import { resolveEnv, loadAllConfigEnvs } from "../lib/env-store.js";
 import { isPlaceholderUrl } from "../lib/base-url.js";
 import type { McpConfig, AuthConfig } from "../types.js";
 
@@ -59,7 +60,7 @@ async function runStatus(configs: McpConfig[]): Promise<void> {
   for (const config of configs) {
     const auth = getConfigAuth(config);
     if (!auth) continue; // skip connectors with no auth (cli, file, mcp)
-    const statuses = getAuthVarStatuses(auth);
+    const statuses = getAuthVarStatuses(auth, config.id);
     const firstRow = true;
 
     statuses.forEach((v, i) => {
@@ -205,7 +206,7 @@ async function setupConfig(config: McpConfig, configDir: string): Promise<void> 
   const overwriteKeys = new Set<string>();
 
   for (const { key, masked } of prompts) {
-    const alreadySet = !!process.env[key];
+    const alreadySet = !!resolveEnv(config.id, key);
 
     if (alreadySet) {
       const overwrite = await confirm(`  ${key} is already set. Overwrite? (y/n): `);
@@ -228,19 +229,18 @@ async function setupConfig(config: McpConfig, configDir: string): Promise<void> 
   }
 
   if (entries.length > 0) {
-    // Separate overwrite entries from new entries so appendEnvVars handles them correctly
     const overwriteEntries = entries.filter((e) => overwriteKeys.has(e.key));
     const newEntries       = entries.filter((e) => !overwriteKeys.has(e.key));
 
     if (newEntries.length > 0) {
-      appendEnvVars(config.id, newEntries, false);
+      writeConfigEnv(configDir, config.id, newEntries, false);
     }
     if (overwriteEntries.length > 0) {
-      appendEnvVars(config.id, overwriteEntries, true);
+      writeConfigEnv(configDir, config.id, overwriteEntries, true);
     }
 
     console.log(
-      `  ${green("✅")} Wrote: ${entries.map((e) => e.key).join(", ")}`,
+      `  ${green("✅")} Wrote: ${entries.map((e) => e.key).join(", ")} → mcp.${config.id}.env`,
     );
   } else {
     console.log(`  ${dim("No vars written.")}`);
@@ -256,8 +256,8 @@ async function runSetup(args: string[], configs: McpConfig[], configDir: string)
   // .gitignore advisory check
   if (!isEnvInGitignore()) {
     console.error(
-      `  ${yellow("⚠️  .env does not appear to be in your .gitignore.")}` +
-      `\n  Add '.env' to .gitignore to avoid committing secrets.`,
+      `  ${yellow("⚠️  mcp.*.env files do not appear to be in your .gitignore.")}` +
+      `\n  Add 'mcp.*.env' to .gitignore to avoid committing secrets.`,
     );
   }
 
@@ -279,7 +279,7 @@ async function runSetup(args: string[], configs: McpConfig[], configDir: string)
     // All configs that have missing auth
     targets = configs.filter((c) => {
       const a = getConfigAuth(c);
-      return a ? checkAuthEnvVars(a).length > 0 : false;
+      return a ? checkAuthEnvVars(a, c.id).length > 0 : false;
     });
   }
 
@@ -292,7 +292,7 @@ async function runSetup(args: string[], configs: McpConfig[], configDir: string)
     await setupConfig(config, configDir);
   }
 
-  console.log(`\n  ${green("✅ All done!")} Your credentials have been saved to ${bold(".env")}.\n`);
+  console.log(`\n  ${green("✅ All done!")} Your credentials have been saved to ${bold("mcp.{config-id}.env")} in your config dir.\n`);
 }
 
 // ── Entry point ───────────────────────────────────────────────────
@@ -302,6 +302,7 @@ export async function run(args: string[]): Promise<void> {
 
   const systemConfig = loadSystemConfig(process.cwd());
   const configDir    = resolveConfigDir(undefined, systemConfig);
+  loadAllConfigEnvs(configDir);
   const configs      = loadConfigs(configDir);
 
   if (configs.length === 0) {

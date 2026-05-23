@@ -50,6 +50,7 @@
 [data-accent="blue"]   { --accent-h: 210; --accent-s: 80%; --accent-l: 62%; }
 [data-accent="cyan"]   { --accent-h: 186; --accent-s: 80%; --accent-l: 52%; }
 [data-accent="pink"]   { --accent-h: 330; --accent-s: 80%; --accent-l: 68%; }
+[data-accent="yellow"] { --accent-h: 45;  --accent-s: 92%; --accent-l: 56%; }
 
 /* ── Light mode ── */
 [data-mode="light"] {
@@ -65,11 +66,13 @@
   --text-dim: #6e6c66;
   --accent-txt: #ffffff;
 }
-[data-mode="light"][data-accent="purple"] { --accent-l: 42%; }
-[data-mode="light"][data-accent="lime"]   { --accent-l: 34%; }
-[data-mode="light"][data-accent="blue"]   { --accent-l: 42%; }
-[data-mode="light"][data-accent="cyan"]   { --accent-l: 34%; }
-[data-mode="light"][data-accent="pink"]   { --accent-l: 46%; }
+/* Dull accents for light backdrop: lower lightness + saturation */
+[data-mode="light"][data-accent="purple"] { --accent-s: 55%; --accent-l: 42%; }
+[data-mode="light"][data-accent="lime"]   { --accent-s: 65%; --accent-l: 34%; }
+[data-mode="light"][data-accent="blue"]   { --accent-s: 60%; --accent-l: 42%; }
+[data-mode="light"][data-accent="cyan"]   { --accent-s: 60%; --accent-l: 34%; }
+[data-mode="light"][data-accent="pink"]   { --accent-s: 58%; --accent-l: 46%; }
+[data-mode="light"][data-accent="yellow"] { --accent-s: 75%; --accent-l: 38%; }
 
 /* ══════════ RESET ══════════ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }

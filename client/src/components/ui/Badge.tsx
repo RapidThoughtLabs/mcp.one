@@ -4,6 +4,7 @@ interface BadgeProps {
   variant?: 'online' | 'offline' | 'error' | 'info' | 'warn'
   children: ReactNode
   className?: string
+  style?: React.CSSProperties
 }
 
 const variantStyles = {
@@ -14,7 +15,7 @@ const variantStyles = {
   warn: { background: 'rgba(254,188,46,0.1)', color: 'var(--yellow)' },
 }
 
-export function Badge({ variant = 'info', children, className = '' }: BadgeProps) {
+export function Badge({ variant = 'info', children, className = '', style }: BadgeProps) {
   return (
     <span
       className={className}
@@ -27,6 +28,7 @@ export function Badge({ variant = 'info', children, className = '' }: BadgeProps
         fontWeight: 600,
         display: 'inline-flex',
         alignItems: 'center',
+        ...style,
       }}
     >
       {children}

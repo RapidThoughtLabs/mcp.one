@@ -194,10 +194,11 @@ export const INTERNAL_CONFIG: McpConfig = {
     },
     {
       name: "auth_set",
-      description: "Set an environment variable / credential. Written to the .env file and loaded into process.env immediately so the same-session auth checks pass without restart.",
+      description: "Set a credential for a specific config. Written to the config's own secrets file and loaded into memory immediately so same-session auth checks pass without restart.",
       params: [
-        { name: "key",   type: "string", required: true, description: "Environment variable name (e.g. 'GITHUB_TOKEN', 'OPENAI_API_KEY')" },
-        { name: "value", type: "string", required: true, description: "Value to set" },
+        { name: "config_id", type: "string", required: true,  description: "ID of the config to set credentials for (e.g. 'github-graphql')" },
+        { name: "key",       type: "string", required: true,  description: "Environment variable name declared in the config's auth block (e.g. 'GITHUB_TOKEN')" },
+        { name: "value",     type: "string", required: true,  description: "Value to set" },
       ],
     },
     {

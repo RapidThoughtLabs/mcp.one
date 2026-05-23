@@ -21,20 +21,21 @@ export function resolveAuth(auth: AuthConfig, configId: string): Record<string, 
 // Used by the CLI startup banner to show ✅ / ⚠️ per config.
 
 import type { AuthConfig as AC } from "../types.js";
+import { resolveEnv } from "../lib/env-store.js";
 
-export function checkAuthEnvVars(auth: AC): string[] {
+export function checkAuthEnvVars(auth: AC, configId: string): string[] {
   const missing: string[] = [];
   switch (auth.type) {
     case "bearer":
     case "oauth2_static":
-      if (!process.env[auth.token_env]) missing.push(auth.token_env);
+      if (!resolveEnv(configId, auth.token_env)) missing.push(auth.token_env);
       break;
     case "basic":
-      if (!process.env[auth.username_env]) missing.push(auth.username_env);
-      if (!process.env[auth.token_env]) missing.push(auth.token_env);
+      if (!resolveEnv(configId, auth.username_env)) missing.push(auth.username_env);
+      if (!resolveEnv(configId, auth.token_env)) missing.push(auth.token_env);
       break;
     case "api_key":
-      if (!process.env[auth.key_env]) missing.push(auth.key_env);
+      if (!resolveEnv(configId, auth.key_env)) missing.push(auth.key_env);
       break;
   }
   return missing;

@@ -26,6 +26,7 @@ const ACCENTS: { value: AccentColor; hsl: string; label: string }[] = [
   { value: 'blue', hsl: 'hsl(210, 80%, 62%)', label: 'Blue' },
   { value: 'cyan', hsl: 'hsl(186, 80%, 52%)', label: 'Cyan' },
   { value: 'pink', hsl: 'hsl(330, 80%, 68%)', label: 'Pink' },
+  { value: 'yellow', hsl: 'hsl(45, 92%, 56%)', label: 'Yellow' },
 ]
 
 function SettingRow({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
