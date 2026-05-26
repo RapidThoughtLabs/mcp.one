@@ -1,16 +1,21 @@
+import fs from "node:fs";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import type { McpConnectorConfig, RegisteredTool, ToolDef, ParamDef } from "../types.js";
+import type { McpConnectorConfig, ToolOverlay, RegisteredTool, ToolDef, ParamDef } from "../types.js";
 import type { IConnector, ConnectorResult } from "./base.js";
 import { runInstall } from "../lib/install-runner.js";
 import { fingerprintInstall, readSentinel, writeSentinel } from "../lib/install-state.js";
 import { buildChildEnv } from "../lib/env-store.js";
 
+/** ConfigIds the connector recently wrote to disk — watcher imports this to skip self-triggered hot-reloads. */
+export const recentlySelfWrote = new Set<string>();
+
 interface McpChild {
   client: Client;
   configId: string;
   tools: ToolDef[];
+  overlays: Record<string, ToolOverlay>;
   transport: "stdio" | "sse";
 }
 
@@ -18,15 +23,15 @@ export class McpConnector implements IConnector {
   readonly type = "mcp" as const;
 
   private children = new Map<string, McpChild>();
-  private pendingConfigs: Array<{ configId: string; config: McpConnectorConfig }> = [];
+  private pendingConfigs: Array<{ configId: string; config: McpConnectorConfig; filePath?: string }> = [];
 
-  addConfig(configId: string, config: McpConnectorConfig): void {
-    this.pendingConfigs.push({ configId, config });
+  addConfig(configId: string, config: McpConnectorConfig, filePath?: string): void {
+    this.pendingConfigs.push({ configId, config, filePath });
   }
 
   async init(): Promise<void> {
     const results = await Promise.allSettled(
-      this.pendingConfigs.map(({ configId, config }) => this.spawnChild(configId, config)),
+      this.pendingConfigs.map(({ configId, config, filePath }) => this.spawnChild(configId, config, filePath)),
     );
 
     for (let i = 0; i < results.length; i++) {
@@ -75,6 +80,7 @@ export class McpConnector implements IConnector {
 
       return { success: !result.isError, data };
     } catch (err) {
+      // Pass MCP errors through verbatim — no custom wrapping
       return {
         success: false,
         data: { error: (err as Error).message, tool: tool.tool.name },
@@ -94,13 +100,20 @@ export class McpConnector implements IConnector {
     this.children.clear();
   }
 
+  /** Returns tools built from overlays — the curated semantic layer the LLM sees. */
   getDiscoveredTools(configId: string): ToolDef[] {
-    return this.children.get(configId)?.tools ?? [];
+    const child = this.children.get(configId);
+    if (!child) return [];
+    return Object.entries(child.overlays).map(([name, ov]) => ({
+      name,
+      description: ov.description ?? "",
+      params: ov.params ?? [],
+    }));
   }
 
   // ── Internal ──────────────────────────────────────────────────────
 
-  private async spawnChild(configId: string, config: McpConnectorConfig): Promise<void> {
+  private async spawnChild(configId: string, config: McpConnectorConfig, filePath?: string): Promise<void> {
     if (config.transport === "stdio" && config.install_command) {
       await this.ensureInstalled(configId, config);
     }
@@ -121,14 +134,56 @@ export class McpConnector implements IConnector {
     await client.connect(transport);
 
     const toolsResult = await client.listTools();
-    const tools: ToolDef[] = toolsResult.tools.map((t) => ({
+    const rawTools: ToolDef[] = toolsResult.tools.map((t) => ({
       name: t.name,
       description: t.description ?? "",
       params: this.schemaToParams(t.inputSchema),
     }));
 
-    this.children.set(configId, { client, configId, tools, transport: config.transport });
-    console.error(`[mcp-connector] Connected: ${configId} (${tools.length} tools discovered)`);
+    // Read existing overlays from disk so user edits survive reconnects
+    let existingOverlays: Record<string, ToolOverlay> = {};
+    if (filePath && fs.existsSync(filePath)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(filePath, "utf-8")) as Record<string, unknown>;
+        if (raw.overlays && typeof raw.overlays === "object" && !Array.isArray(raw.overlays)) {
+          existingOverlays = raw.overlays as Record<string, ToolOverlay>;
+        }
+      } catch {
+        // ignore read/parse errors — start fresh
+      }
+    }
+
+    // Reconcile overlays against the current tool list.
+    // New tool → seed from upstream. Existing → preserve (user may have edited).
+    // Gone tool → its overlay is dropped (tools[] is source of truth for existence).
+    const reconciledOverlays: Record<string, ToolOverlay> = {};
+    for (const tool of rawTools) {
+      reconciledOverlays[tool.name] = existingOverlays[tool.name] ?? {
+        description: tool.description,
+        params: tool.params,
+      };
+    }
+
+    // Write tools[] + overlays back to disk
+    if (filePath) {
+      try {
+        let fileJson: Record<string, unknown> = {};
+        if (fs.existsSync(filePath)) {
+          fileJson = JSON.parse(fs.readFileSync(filePath, "utf-8")) as Record<string, unknown>;
+        }
+        fileJson.tools    = rawTools;
+        fileJson.overlays = reconciledOverlays;
+
+        recentlySelfWrote.add(configId);
+        fs.writeFileSync(filePath, JSON.stringify(fileJson, null, 2) + "\n", "utf-8");
+      } catch (err) {
+        console.error(`[mcp-connector] Failed to persist overlays for "${configId}":`, (err as Error).message);
+        recentlySelfWrote.delete(configId);
+      }
+    }
+
+    this.children.set(configId, { client, configId, tools: rawTools, overlays: reconciledOverlays, transport: config.transport });
+    console.error(`[mcp-connector] Connected: ${configId} (${rawTools.length} tools)`);
   }
 
   private async ensureInstalled(configId: string, config: McpConnectorConfig): Promise<void> {

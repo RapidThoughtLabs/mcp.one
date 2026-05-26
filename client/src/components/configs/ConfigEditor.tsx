@@ -34,6 +34,7 @@ interface EditorState {
   mcpCommand: string
   mcpArgs: string
   mcpUrl: string
+  mcpInstallCommand: string
   sqlDialect: 'postgres' | 'mysql' | 'sqlite'
   sqlConnMode: 'dsn' | 'fields'
   sqlConnectionStringEnv: string
@@ -48,6 +49,9 @@ interface EditorState {
   sqlDefaultMaxRows: string
   auth: AuthFields
   tools: ToolRow[]
+  // Passthrough fields for MCP — managed server-side, not shown in the editor UI
+  rawTools?: unknown[]
+  rawOverlays?: Record<string, unknown>
 }
 
 // ── Raw config parser ───────────────────────────────────────────────
@@ -148,6 +152,7 @@ function parseRawConfig(raw: Record<string, unknown>): EditorState {
     mcpCommand: (connector.command as string) || '',
     mcpArgs: Array.isArray(connector.args) ? (connector.args as string[]).join(' ') : '',
     mcpUrl: (connector.url as string) || '',
+    mcpInstallCommand: (connector.install_command as string) || '',
     sqlDialect: (connector.dialect as 'postgres' | 'mysql' | 'sqlite') ?? 'postgres',
     sqlConnMode: connector.connection_string_env ? 'dsn' : 'fields',
     sqlConnectionStringEnv: (connector.connection_string_env as string) || '',
@@ -162,6 +167,10 @@ function parseRawConfig(raw: Record<string, unknown>): EditorState {
     sqlDefaultMaxRows: connector.default_max_rows != null ? String(connector.default_max_rows) : '',
     auth: parseAuthFields(auth),
     tools,
+    rawTools: Array.isArray(raw.tools) ? raw.tools as unknown[] : undefined,
+    rawOverlays: raw.overlays && typeof raw.overlays === 'object' && !Array.isArray(raw.overlays)
+      ? raw.overlays as Record<string, unknown>
+      : undefined,
   }
 }
 
@@ -219,6 +228,7 @@ function buildConnector(s: EditorState): Record<string, unknown> {
       if (s.mcpTransport === 'stdio') {
         conn.command = s.mcpCommand
         if (s.mcpArgs.trim()) conn.args = s.mcpArgs.trim().split(/\s+/)
+        if (s.mcpInstallCommand.trim()) conn.install_command = s.mcpInstallCommand.trim()
       } else {
         conn.url = s.mcpUrl
       }
@@ -281,9 +291,14 @@ function buildConfig(id: string, s: EditorState): Record<string, unknown> {
     id,
     name: s.name,
     connector: buildConnector(s),
-    tools: s.connectorType === 'mcp' ? [] : s.tools.filter((t) => t.name).map(buildTool),
+    tools: s.connectorType === 'mcp'
+      ? (s.rawTools ?? [])
+      : s.tools.filter((t) => t.name).map(buildTool),
   }
   if (s.description) cfg.description = s.description
+  if (s.connectorType === 'mcp' && s.rawOverlays && Object.keys(s.rawOverlays).length > 0) {
+    cfg.overlays = s.rawOverlays
+  }
   return cfg
 }
 
@@ -567,6 +582,9 @@ export function ConfigEditor({ config, updateConfig, deleteConfig, onClose }: Co
                   </FieldGroup>
                   <FieldGroup label="ARGS" hint="Space-separated">
                     <input style={inputCss(state.mcpArgs !== initial.mcpArgs)} value={state.mcpArgs} onChange={(e) => set({ mcpArgs: e.target.value })} placeholder="-y @modelcontextprotocol/server-github" />
+                  </FieldGroup>
+                  <FieldGroup label="INSTALL COMMAND" hint="Run once to install the server. Required to publish.">
+                    <input style={inputCss(state.mcpInstallCommand !== initial.mcpInstallCommand)} value={state.mcpInstallCommand} onChange={(e) => set({ mcpInstallCommand: e.target.value })} placeholder="npx -y @modelcontextprotocol/server-github" />
                   </FieldGroup>
                 </>
               ) : (

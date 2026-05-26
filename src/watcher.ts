@@ -4,6 +4,7 @@ import { loadConfigEnv, unloadConfigEnv } from "./lib/env-store.js";
 import type { ToolRegistry } from "./server.js";
 import { loadSingleConfig } from "./loader.js";
 import { connectorRegistry } from "./connectors/registry.js";
+import { recentlySelfWrote } from "./connectors/mcp.js";
 import type { GraphqlConnector } from "./connectors/graphql.js";
 import type { GrpcConnector } from "./connectors/grpc.js";
 import type { SqlConnector } from "./connectors/sql.js";
@@ -175,6 +176,17 @@ export function startWatcher(
     if (!isMcpConfigFile(filePath)) return;
     debounce(filePath, async () => {
       if (paused) return;
+
+      // Skip reloads triggered by the MCP connector writing tools/overlays after connect
+      const base = path.basename(filePath);
+      const derivedId = base.slice(4, -5); // "mcp.github-mcp.json" → "github-mcp"
+      const configId = fileToConfigId.get(filePath) ?? derivedId;
+      if (recentlySelfWrote.has(configId)) {
+        recentlySelfWrote.delete(configId);
+        console.error(`[watcher] ~ ${base} (self-write, skipped)`);
+        return;
+      }
+
       console.error(`[watcher] ~ ${path.basename(filePath)}`);
 
       // Remove previous version of this config

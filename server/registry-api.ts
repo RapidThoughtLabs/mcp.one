@@ -228,15 +228,36 @@ export function createRegistryRouter(): Router {
     );
 
     // D2: set compound id in the payload
-    (payload as Record<string, unknown>).id = installedId;
+    const p = payload as Record<string, unknown>;
+    p.id = installedId;
+
+    // When overwriting an existing install, preserve local connector.env (may hold
+    // credentials) and merge overlays (registry wins per-tool, local-only entries kept).
+    if (overwrite && fs.existsSync(filePath)) {
+      try {
+        const existing = JSON.parse(fs.readFileSync(filePath, "utf-8")) as Record<string, unknown>;
+        const existingConnector = existing.connector as Record<string, unknown> | undefined;
+        if (existingConnector?.env) {
+          const newConnector = (p.connector as Record<string, unknown> | undefined) ?? {};
+          newConnector.env = existingConnector.env;
+          p.connector = newConnector;
+        }
+        const existingOverlays = (existing.overlays ?? {}) as Record<string, unknown>;
+        const newOverlays = (p.overlays ?? {}) as Record<string, unknown>;
+        p.overlays = { ...existingOverlays, ...newOverlays };
+      } catch {
+        // Can't read existing file — proceed with fresh payload
+      }
+    }
 
     fs.mkdirSync(configsDir, { recursive: true });
-    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2) + "\n", "utf-8");
+    fs.writeFileSync(filePath, JSON.stringify(p, null, 2) + "\n", "utf-8");
 
     // D3: store qualified slug in manifest
     addToManifest(qualifiedSlug, resolvedVersion, resolvedConnector, registry);
 
     res.status(201).json({ ok: true, configId: installedId, qualified_slug: qualifiedSlug, version: resolvedVersion });
+
   }));
 
   // ── POST /api/registry/publish ────────────────────────────────────

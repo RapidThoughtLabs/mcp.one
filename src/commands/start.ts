@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { loadConfigs } from "../loader.js";
 import { startServer } from "../server.js";
 import { loadSystemConfig } from "../system-config.js";
@@ -17,7 +18,6 @@ import { FileConnector } from "../connectors/file.js";
 import { GrpcConnector } from "../connectors/grpc.js";
 import { GraphqlConnector } from "../connectors/graphql.js";
 import { McpConnector } from "../connectors/mcp.js";
-import { discoverMcpServers } from "../discovery.js";
 import { InternalConnector } from "../connectors/internal.js";
 import { SqlConnector } from "../connectors/sql.js";
 import { MongoConnector } from "../connectors/mongodb.js";
@@ -118,24 +118,21 @@ export async function run(args: string[]): Promise<void> {
     }
     return true;
   });
-  const autoDiscovered = discoverMcpServers();
 
-  // Internal config is always first; hand-authored ids take precedence over auto-discovered
-  const handAuthoredIds = new Set(handAuthored.map((c) => c.id));
   const allConfigs = [
     INTERNAL_CONFIG,
     ...handAuthored,
-    ...autoDiscovered.filter((c) => !handAuthoredIds.has(c.id) && c.id !== "one"),
   ];
 
-  if (handAuthored.length === 0 && autoDiscovered.length === 0) {
+  if (handAuthored.length === 0) {
     log.info("server", `No user configs yet — drop mcp.*.json files in ${configDir} or call one.registry_install`);
   }
 
   // Queue MCP, GraphQL, and gRPC configs for discovery during initAll()
   for (const config of allConfigs) {
     if (config.connector.type === "mcp") {
-      mcpConnector.addConfig(config.id, config.connector as McpConnectorConfig);
+      const filePath = path.join(configDir, `mcp.${config.id}.json`);
+      mcpConnector.addConfig(config.id, config.connector as McpConnectorConfig, filePath);
     }
     if (config.connector.type === "graphql" && config.tools.length === 0) {
       graphqlConnector.addConfig(
