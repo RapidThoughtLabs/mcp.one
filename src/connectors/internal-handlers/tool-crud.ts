@@ -137,6 +137,22 @@ export async function handleUpdateTool(
   const raw = readRawConfig(ctx.configDir, configId);
   if (!raw) return { success: false, data: { error: `Config "${configId}" not found` } };
 
+  const connectorType = (raw.connector as Record<string, unknown> | undefined)?.type as string | undefined;
+  const DISCOVERABLE = ["mcp", "graphql", "grpc"];
+
+  if (connectorType && DISCOVERABLE.includes(connectorType)) {
+    // Discoverable connectors: write to overlays{} so user edits survive reconnects
+    const overlays = ((raw.overlays ?? {}) as Record<string, unknown>);
+    const existing = (overlays[toolName] as Record<string, unknown> | undefined) ?? {};
+    const merged = { ...existing, ...(updates as object) };
+    writeConfig(ctx.configDir, configId, { ...raw, overlays: { ...overlays, [toolName]: merged } });
+    return {
+      success: true,
+      data: { config_id: configId, tool_name: toolName, message: `Tool "${toolName}" overlay updated.` },
+    };
+  }
+
+  // Non-discoverable connectors: update tools[] directly
   const tools = Array.isArray(raw.tools) ? [...(raw.tools as unknown[])] : [];
   const idx   = tools.findIndex((t) => (t as Record<string, unknown>).name === toolName);
 

@@ -4,7 +4,6 @@
 import { run as runStart } from "./commands/start.js";
 import { run as runList } from "./commands/list.js";
 import { run as runAuth } from "./commands/auth.js";
-import { run as runDiscover } from "./commands/discover.js";
 import { run as runLogin } from "./commands/login.js";
 import { run as runPublish } from "./commands/publish.js";
 import { run as runFork } from "./commands/fork.js";
@@ -66,10 +65,6 @@ switch (command) {
     await runUpdate(args.slice(1));
     break;
 
-  case "discover":
-    await runDiscover();
-    break;
-
   case "help":
   case "--help":
   case "-h":
@@ -102,7 +97,6 @@ function printUsage(): void {
     mcp-one logout                       Log out of the registry
     mcp-one publish [file]               Publish a config to the registry
     mcp-one fork <namespace/slug>        Fork a registry config into your namespace
-    mcp-one discover                     Show auto-discoverable MCP servers
     mcp-one update                       Update mcp-one to the latest version
     mcp-one help                         Show this message
 

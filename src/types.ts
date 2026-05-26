@@ -236,6 +236,13 @@ export interface ToolDef {
   limit?: number;
 }
 
+// ── Overlay (user-editable semantic layer seeded from auto-discovered tools) ──
+
+export interface ToolOverlay {
+  description?: string;
+  params?: ParamDef[];
+}
+
 // ── Top-Level Config ───────────────────────────────────────────────
 
 export interface McpConfig {
@@ -244,8 +251,8 @@ export interface McpConfig {
   description?: string;       // shown to LLM for namespace discovery
   api_version?: string;       // informational: upstream API version this config targets (e.g. "v3", "2024-01-01")
   connector: ConnectorConfig;  // one connector per config
-  tools: ToolDef[];            // empty for MCP/GraphQL/gRPC connector (auto-discovered)
-  overlays?: Record<string, { description?: string }>; // override auto-generated descriptions
+  tools: ToolDef[];            // MCP: upstream snapshot refreshed on connect; others: static definitions
+  overlays?: Record<string, ToolOverlay>; // curated semantic layer; what LLM and registry see
 }
 
 // ── Internal: Registered tool with its parent config context ───────

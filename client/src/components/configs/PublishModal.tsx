@@ -5,20 +5,11 @@ import { Button } from '@/components/ui/Button'
 import { api, ApiRequestError } from '@/lib/api'
 import type { ConfigSummary } from '@/types/server'
 
-const OVERLAY_ONLY = ['mcp', 'graphql', 'grpc']
-
 function buildPublishPayload(cfg: ConfigSummary): Record<string, unknown> {
   const raw = cfg.raw as Record<string, unknown>
-  if (!OVERLAY_ONLY.includes(cfg.connector.type)) {
-    return { ...raw }
-  }
-
-  const { overlays, registry_overlays, tools: _drop, ...rest } = raw
-  return {
-    ...rest,
-    registry_overlays: (registry_overlays ?? overlays ?? {}) as Record<string, unknown>,
-    tools: [],
-  }
+  // Drop registry_overlays — legacy accidental field replaced by overlays
+  const { registry_overlays: _legacy, ...rest } = raw
+  return rest
 }
 
 function Field({
@@ -100,6 +91,20 @@ export function PublishModal({ open, onClose, cfg }: PublishModalProps) {
 
   const handlePublish = async () => {
     setError(null)
+
+    // MCP stdio configs must have both a start command and an install command before publishing
+    const connector = (cfg.raw as Record<string, unknown>).connector as Record<string, unknown> | undefined
+    if (connector?.type === 'mcp' && connector?.transport === 'stdio') {
+      if (!connector?.command) {
+        setError('MCP configs require a start command (connector.command) before publishing')
+        return
+      }
+      if (!connector?.install_command) {
+        setError('MCP configs require an install command (connector.install_command) before publishing')
+        return
+      }
+    }
+
     setPhase('submitting')
 
     const tags = tagsRaw.split(',').map((t) => t.trim()).filter(Boolean)
@@ -130,8 +135,6 @@ export function PublishModal({ open, onClose, cfg }: PublishModalProps) {
     : `Forked as ${result.config.qualified_slug}`
     : 'Published'
 
-  const isOverlayOnly = OVERLAY_ONLY.includes(cfg.connector.type)
-
   return (
     <Modal open={open} onClose={onClose} title={`Publish — ${cfg.name}`} width={520}>
       {phase === 'success' && (
@@ -144,15 +147,6 @@ export function PublishModal({ open, onClose, cfg }: PublishModalProps) {
       {(phase === 'form' || phase === 'submitting') && (
         <>
           <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto' }}>
-            {isOverlayOnly && (
-              <div style={{
-                fontSize: 10, color: 'var(--accent)', background: 'var(--accent-dim)',
-                border: '1px solid var(--accent)', borderRadius: 4, padding: '6px 10px',
-                letterSpacing: '0.03em', lineHeight: 1.5,
-              }}>
-                Overlay-only publish — tool descriptions and customizations only. Connection details and tool list are not shared.
-              </div>
-            )}
             {authUsername && (
               <div style={{ fontSize: 10, color: 'var(--text-dim)', letterSpacing: '0.03em' }}>
                 Publishing as <code style={{ color: 'var(--accent)' }}>@{authUsername}</code>

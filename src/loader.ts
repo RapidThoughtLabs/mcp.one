@@ -6,6 +6,7 @@ import type {
   AuthConfig,
   ToolDef,
   ParamDef,
+  ToolOverlay,
   ConnectorConfig,
   ConnectorType,
   HttpConnectorConfig,
@@ -716,27 +717,33 @@ export function validateConfig(raw: unknown, file: string): McpConfig {
     : undefined;
 
   const overlays = c.overlays !== undefined && typeof c.overlays === "object" && c.overlays !== null && !Array.isArray(c.overlays)
-    ? c.overlays as Record<string, { description?: string }>
+    ? c.overlays as Record<string, ToolOverlay>
     : undefined;
 
-  // ── Discoverable connectors: tools are auto-discovered at runtime ──
+  // ── Discoverable connectors ────────────────────────────────────────
   const DISCOVERABLE_TYPES: ConnectorType[] = ["mcp", "graphql", "grpc"];
   if (DISCOVERABLE_TYPES.includes(connector.type)) {
     if (c.tools !== undefined) {
       assertArray(c.tools, "tools", file);
-      if ((c.tools as unknown[]).length > 0 && connector.type === "mcp") {
-        throw new Error(
-          `[${file}] MCP connector configs must not declare tools — tools are auto-discovered at runtime`,
-        );
-      }
     }
+
+    // MCP: serve from overlays immediately (populated after first connect).
+    // GraphQL/gRPC: return [] so fresh introspection runs at startup.
+    const tools: ToolDef[] = connector.type === "mcp" && overlays
+      ? Object.entries(overlays).map(([name, ov]) => ({
+          name,
+          description: ov.description ?? "",
+          params: ov.params ?? [],
+        }))
+      : [];
+
     return {
       id,
       name: c.name as string,
       ...(description ? { description } : {}),
       ...(overlays ? { overlays } : {}),
       connector,
-      tools: [],
+      tools,
     };
   }
 
