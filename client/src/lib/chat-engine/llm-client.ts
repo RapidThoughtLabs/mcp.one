@@ -52,7 +52,7 @@ export async function streamChatCompletion(
       signal,
     })
   } catch (err) {
-    if ((err as Error).name === 'AbortError') return
+    if ((err as Error).name === 'AbortError') { callbacks.onDone(); return }
     serverLog('error', `[LLM] Network error after ${Date.now() - startTime}ms: ${(err as Error).message}`)
     callbacks.onError(err as Error)
     return
@@ -187,7 +187,7 @@ export async function streamChatCompletion(
       }
     }
   } catch (err) {
-    if ((err as Error).name === 'AbortError') return
+    if ((err as Error).name === 'AbortError') { callbacks.onDone(); return }
     serverLog('error', `[LLM] Streaming error after ${Date.now() - startTime}ms: ${(err as Error).message}`)
     callbacks.onError(err as Error)
     return

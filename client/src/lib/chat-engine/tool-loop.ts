@@ -160,7 +160,18 @@ export async function runToolLoop(
       return history
     }
 
-    if (signal?.aborted) return history
+    if (signal?.aborted) {
+      if (messageStarted) {
+        callbacks.onMessageComplete({
+          id: assistantMsgId,
+          role: 'assistant',
+          content: accumulatedContent || null,
+          timestamp: Date.now(),
+          isStreaming: false,
+        })
+      }
+      return history
+    }
 
     // ── Case 1: Text response (no tool calls) — done ──────────────
     if (pendingToolCalls.length === 0) {

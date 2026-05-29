@@ -3,6 +3,7 @@ import path from "node:path";
 import { Router } from "express";
 import { validateConfig } from "./loader.js";
 import { loadConfigEnv } from "./lib/env-store.js";
+import { writeConfigEnv } from "./lib/env-writer.js";
 import { log } from "./lib/logger.js";
 import { CONNECTOR_TYPES, isConnectorType } from "./lib/connector-types.js";
 import {
@@ -11,6 +12,7 @@ import {
   compoundId,
   toConfigSummary,
 } from "./lib/config-rules.js";
+import { loadManifest, removeFromManifest } from "./registry/auth.js";
 import type { RegisteredTool, ParamDef } from "./types.js";
 
 function buildInputSchema(params: ParamDef[]): Record<string, unknown> {
@@ -249,6 +251,32 @@ export function createAdminRouter(ctx: AdminContext): Router {
     res.json({ ok: true });
   });
 
+  // POST /admin/credentials — write env vars to a config's .env file and reload.
+  // Body: { configId: string, entries: { key: string, value: string }[], overwrite?: boolean }
+  router.post("/credentials", (req, res) => {
+    const { configId, entries, overwrite = false } = req.body as {
+      configId?: string;
+      entries?: { key: string; value: string }[];
+      overwrite?: boolean;
+    };
+
+    if (!configId || typeof configId !== "string") {
+      res.status(400).json({ error: '"configId" (string) is required' });
+      return;
+    }
+    if (!Array.isArray(entries) || entries.length === 0) {
+      res.status(400).json({ error: '"entries" must be a non-empty array of {key, value}' });
+      return;
+    }
+
+    try {
+      const result = writeConfigEnv(ctx.configDir, configId, entries, overwrite);
+      res.json({ ok: true, written: result.written, skipped: result.skipped });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
   // POST /admin/reload-env — reload a config's secrets file into the env store.
   // Called by the Express bridge after credentials are written to disk.
   router.post("/reload-env", (req, res) => {
@@ -278,6 +306,20 @@ export function createAdminRouter(ctx: AdminContext): Router {
     }
 
     fs.unlinkSync(filePath);
+
+    // Also remove from the registry manifest so the registry page no longer
+    // shows this config as installed after it's been deleted from the config page.
+    const manifest = loadManifest();
+    const entry = manifest.installed.find((e) => {
+      const withoutNs = e.slug.replace(/^@[^/]+\//, "");
+      const colonIdx  = withoutNs.indexOf(":");
+      if (colonIdx === -1) return false;
+      const base = withoutNs.slice(0, colonIdx);
+      const ct   = withoutNs.slice(colonIdx + 1);
+      return `${base}-${ct}` === id;
+    });
+    if (entry) removeFromManifest(entry.slug, entry.registry);
+
     res.json({ ok: true });
   });
 

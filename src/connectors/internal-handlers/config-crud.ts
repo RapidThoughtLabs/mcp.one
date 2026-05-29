@@ -11,6 +11,7 @@ import path from "node:path";
 import { validateConfig } from "../../loader.js";
 import { CONNECTOR_TYPES, type ConnectorTypeSuffix } from "../../lib/connector-types.js";
 import { RESERVED_IDS, validateBaseId, compoundId } from "../../lib/config-rules.js";
+import { loadManifest, removeFromManifest } from "../../registry/auth.js";
 import type { ConnectorResult } from "../base.js";
 import type { InternalContext } from "../internal.js";
 
@@ -192,6 +193,19 @@ export async function handleDeleteConfig(
   }
 
   fs.unlinkSync(filePath);
+
+  // Also remove from the registry manifest so the registry page no longer
+  // shows this config as installed after it's been deleted from the config page.
+  const manifest = loadManifest();
+  const entry = manifest.installed.find((e) => {
+    const withoutNs = e.slug.replace(/^@[^/]+\//, "");
+    const colonIdx  = withoutNs.indexOf(":");
+    if (colonIdx === -1) return false;
+    const base = withoutNs.slice(0, colonIdx);
+    const ct   = withoutNs.slice(colonIdx + 1);
+    return `${base}-${ct}` === configId;
+  });
+  if (entry) removeFromManifest(entry.slug, entry.registry);
 
   return {
     success: true,

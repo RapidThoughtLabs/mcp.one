@@ -1,12 +1,7 @@
-import path from "node:path";
-import os from "node:os";
 import { Router } from "express";
 import type { McpClientInstance } from "./mcp-client.js";
 import { createAdminClient, AdminUnavailableError } from "./mcp-admin.js";
 import { loadManifest, loadRegistries } from "../src/registry/auth.js";
-import { writeConfigEnv } from "../src/lib/env-writer.js";
-import { loadSystemConfig } from "../src/system-config.js";
-import { resolveConfigDir } from "../src/lib/resolve-config-dir.js";
 
 // ─────────────────────────────────────────────────────────────────
 
@@ -306,35 +301,25 @@ export function createApiRouter(mcp: McpClientInstance): Router {
   });
 
   // ── POST /api/credentials ────────────────────────────────────────
-  // Write credential env vars to .env for a given config.
-  // Body: { configId: string, entries: { key: string, value: string }[], overwrite?: boolean }
+  // Proxy credential writes to the mcp-one admin API so the local mcp-one
+  // instance writes and reloads the .env file on its own filesystem.
 
-  router.post("/credentials", (req, res) => {
-    const { configId, entries, overwrite = false } = req.body as {
-      configId?: string;
-      entries?: { key: string; value: string }[];
-      overwrite?: boolean;
-    };
-
-    if (!configId || typeof configId !== "string") {
-      res.status(400).json({ error: '"configId" (string) is required' });
-      return;
-    }
-    if (!Array.isArray(entries) || entries.length === 0) {
-      res.status(400).json({ error: '"entries" must be a non-empty array of {key, value}' });
-      return;
-    }
-
+  router.post("/credentials", async (req, res) => {
+    const { configId } = req.body as { configId?: string };
     try {
-      const systemConfig = loadSystemConfig(process.cwd());
-      const configDir = resolveConfigDir(undefined, systemConfig);
-      const result = writeConfigEnv(configDir, configId, entries, overwrite);
-      mcp.addLog("info", "api", `Credentials saved for: ${configId} (${result.written.join(", ")})`);
-      // Tell mcp-one to reload this config's env so auth checks see the new values immediately.
-      admin.post("/reload-env", { configId }).catch(() => {});
-      res.json({ ok: true, written: result.written, skipped: result.skipped });
+      const data = await admin.post("/credentials", req.body as unknown);
+      const written = (data as { written?: string[] }).written ?? [];
+      if (written.length > 0) {
+        mcp.addLog("info", "api", `Credentials saved for: ${configId} (${written.join(", ")})`);
+      }
+      res.json(data);
     } catch (err) {
-      res.status(500).json({ error: (err as Error).message });
+      if (err instanceof AdminUnavailableError) {
+        res.status(503).json({ error: "mcp-one not connected" });
+        return;
+      }
+      const status = (err as Error & { status?: number }).status ?? 500;
+      res.status(status).json({ error: (err as Error).message });
     }
   });
 

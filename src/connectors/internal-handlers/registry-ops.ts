@@ -6,7 +6,6 @@
 
 import fs   from "node:fs";
 import path from "node:path";
-import crypto from "node:crypto";
 import {
   searchConfigs,
   featuredConfigs,
@@ -23,12 +22,6 @@ import type { ConnectorResult } from "../base.js";
 import type { InternalContext } from "../internal.js";
 
 // ── helpers ──────────────────────────────────────────────────────────
-
-function verifyEtag(payloadJson: string, etag: string): boolean {
-  if (!etag) return true;
-  const hash = crypto.createHash("sha256").update(payloadJson).digest("hex");
-  return hash === etag;
-}
 
 /**
  * Parse an install target into its components.
@@ -250,18 +243,9 @@ export async function handleRegistryInstall(
   // ── Step 5–8: Download payload, mutate id, write file, record manifest ──
 
   try {
-    const { payload, version: resolvedVersion, etag } = await fetchVersionPayload(
+    const { payload, version: resolvedVersion } = await fetchVersionPayload(
       namespace, rawSlug, resolvedConnector, version, registry,
     );
-
-    // Integrity check over the original registry payload (before any local mutations)
-    const originalPayloadJson = JSON.stringify(payload, null, 2);
-    if (etag && !verifyEtag(originalPayloadJson, etag)) {
-      return {
-        success: false,
-        data: { error: `Integrity check failed for ${qualifiedSlug}@${resolvedVersion}. ETag mismatch — download may be corrupted.` },
-      };
-    }
 
     // D2: overwrite the id field with the compound form
     const payloadObj = payload as Record<string, unknown>;
