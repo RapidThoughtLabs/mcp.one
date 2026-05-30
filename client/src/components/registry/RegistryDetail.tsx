@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ArrowLeft, Star, Download, ShieldCheck, Loader2, Package, Tag, Wrench } from 'lucide-react'
+import { ArrowLeft, Star, Download, ShieldCheck, Loader2, Package, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { toast } from '@/components/ui/Toast'
@@ -324,8 +324,8 @@ export function RegistryDetail({
                   width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '7px 14px',
                   background: active ? 'var(--accent-dim)' : 'transparent',
+                  border: 'none',
                   borderLeft: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
-                  border: 'none', borderLeft: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
                   cursor: 'pointer', textAlign: 'left', flexShrink: 0,
                 }}
               >

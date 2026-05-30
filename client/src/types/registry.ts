@@ -81,6 +81,13 @@ export interface Manifest {
   installed: ManifestEntry[]
 }
 
+export interface RegistryFilters {
+  q?: string
+  sort_by?: 'popular' | 'recent' | 'name'
+  connector_type?: string
+  verified?: boolean
+}
+
 export interface RegistrySource {
   name: string
   url: string
