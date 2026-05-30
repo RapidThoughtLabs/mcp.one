@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { api, setApiBase, deriveBridgeUrl, getApiBase } from '@/lib/api'
+import { api, setApiBase, deriveBridgeUrl } from '@/lib/api'
 import { useAppStore } from '@/stores/app-store'
 import type { ConnectResponse } from '@/types/server'
 
@@ -23,19 +23,16 @@ function saveRecent(endpoint: string): void {
 
 // ── Component ─────────────────────────────────────────────────────
 
-// True when the console is served from a non-local origin (e.g. the hosted VPS).
-// In that case the Vite proxy isn't available, so the user's local bridge URL
-// must be used explicitly. On localhost the proxy handles routing transparently.
+// When the console is served from a remote host, the Vite proxy isn't available.
+// We derive the bridge URL from the MCP endpoint and set it silently — no field needed.
 const IS_REMOTE = !['localhost', '127.0.0.1'].includes(window.location.hostname)
 
 export function ServerConnect() {
   const { setConnectedEndpoint } = useAppStore()
-  const [endpoint, setEndpoint]   = useState('http://localhost:3333')
-  const [bridgeUrl, setBridgeUrl] = useState(() => getApiBase() || deriveBridgeUrl('http://localhost:3333'))
-  const [bridgeEdited, setBridgeEdited] = useState(false)
-  const [recents, setRecents]     = useState<string[]>([])
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState<string | null>(null)
+  const [endpoint, setEndpoint] = useState('http://localhost:3333')
+  const [recents, setRecents]   = useState<string[]>([])
+  const [loading, setLoading]   = useState(false)
+  const [error, setError]       = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -43,23 +40,16 @@ export function ServerConnect() {
     inputRef.current?.focus()
   }, [])
 
-  // Auto-derive bridge URL from MCP endpoint whenever endpoint changes,
-  // unless the user has manually edited the bridge URL.
-  useEffect(() => {
-    if (!bridgeEdited) setBridgeUrl(deriveBridgeUrl(endpoint))
-  }, [endpoint, bridgeEdited])
-
   async function handleConnect(e: React.FormEvent) {
     e.preventDefault()
-    const url    = endpoint.trim()
-    const bridge = bridgeUrl.trim()
+    const url = endpoint.trim()
     if (!url) return
 
     setLoading(true)
     setError(null)
 
     try {
-      if (IS_REMOTE) setApiBase(bridge)
+      if (IS_REMOTE) setApiBase(deriveBridgeUrl(url))
       await api.post<ConnectResponse>('/connect', { endpoint: url })
       saveRecent(url)
       setConnectedEndpoint(url)
@@ -159,47 +149,6 @@ export function ServerConnect() {
               ))}
             </datalist>
           </div>
-
-          {/* API bridge URL — only needed when the console is served remotely */}
-          {IS_REMOTE && <div style={{ marginBottom: 12 }}>
-            <label style={{
-              display: 'block',
-              fontSize: 10,
-              letterSpacing: '0.1em',
-              color: 'var(--text-dim)',
-              marginBottom: 6,
-              textTransform: 'uppercase',
-            }}>
-              API bridge URL
-            </label>
-            <input
-              type="url"
-              value={bridgeUrl}
-              onChange={(e) => { setBridgeUrl(e.target.value); setBridgeEdited(true); setError(null) }}
-              placeholder="http://localhost:3456"
-              disabled={loading}
-              style={{
-                width: '100%',
-                padding: '10px 12px',
-                background: 'var(--surface)',
-                border: `1px solid ${error ? 'var(--red)' : 'var(--border2)'}`,
-                borderRadius: 6,
-                color: 'var(--text)',
-                fontSize: 13,
-                outline: 'none',
-                transition: 'border-color 0.15s',
-              }}
-              onFocus={(e) => {
-                if (!error) e.currentTarget.style.borderColor = 'var(--accent)'
-              }}
-              onBlur={(e) => {
-                if (!error) e.currentTarget.style.borderColor = 'var(--border2)'
-              }}
-            />
-            <span style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 4, display: 'block' }}>
-              Express bridge (port 3456) — auto-derived from server endpoint
-            </span>
-          </div>}
 
           {/* Error */}
           {error && (

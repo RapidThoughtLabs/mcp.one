@@ -34,10 +34,6 @@ export function setApiBase(url: string): void {
   try { localStorage.setItem(STORAGE_KEY, apiBase) } catch { /* ignore */ }
 }
 
-export function getApiBase(): string {
-  return apiBase
-}
-
 /** Derive bridge URL (port 3456) from MCP endpoint URL (port 3333). */
 export function deriveBridgeUrl(mcpUrl: string): string {
   try {
