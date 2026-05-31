@@ -1,65 +1,73 @@
+import { fileURLToPath } from "node:url";
 import express from "express";
 import cors from "cors";
 import { createMcpClient } from "./mcp-client.js";
 import { createApiRouter } from "./api.js";
 import { createRegistryRouter } from "./registry-api.js";
 
-const PORT = Number(process.env["PORT"] ?? 3456);
+export async function startBridge(options: {
+  port?: number;
+  /** If provided, auto-connect to this mcp-one endpoint on startup. */
+  endpoint?: string;
+}): Promise<{ shutdown: () => Promise<void> }> {
+  const port = options.port ?? 3456;
+  const mcp = createMcpClient();
 
-// ── MCP Bridge ─────────────────────────────────────────────────────
-// Spawns mcp-one as a child process and communicates over stdio
+  const app = express();
 
-const mcp = createMcpClient();
+  app.use(cors({
+    origin: [
+      "http://localhost:5173",
+      "http://127.0.0.1:5173",
+      "https://console.rapidthoughtlabs.space",
+    ],
+  }));
+  app.use(express.json());
 
-// ── Express App ────────────────────────────────────────────────────
+  app.use("/api", createApiRouter(mcp));
+  app.use("/api/registry", createRegistryRouter());
 
-const app = express();
-
-// Allow the Vite dev server and the hosted console (which talks to the local bridge)
-app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "https://console.rapidthoughtlabs.space",
-  ],
-}));
-app.use(express.json());
-
-// Mount all /api routes
-app.use("/api", createApiRouter(mcp));
-
-// Mount registry proxy routes
-app.use("/api/registry", createRegistryRouter());
-
-// Health ping at root for quick checks
-app.get("/", (_req, res) => {
-  res.json({ service: "mcp-one-api", version: "0.1.0" });
-});
-
-// ── Start ──────────────────────────────────────────────────────────
-
-const server = app.listen(PORT, () => {
-  console.log(`[server] API listening on http://localhost:${PORT}`);
-  console.log(`[server] Health: http://localhost:${PORT}/api/health`);
-});
-
-// ── Graceful Shutdown ──────────────────────────────────────────────
-
-async function shutdown(signal: string): Promise<void> {
-  console.log(`\n[server] ${signal} received — shutting down`);
-  await mcp.shutdown();
-  server.close(() => {
-    console.log("[server] HTTP server closed");
-    process.exit(0);
+  app.get("/", (_req, res) => {
+    res.json({ service: "mcp-one-api", version: "0.1.0" });
   });
-  // Force exit after 5s if graceful close hangs
-  setTimeout(() => process.exit(1), 5_000);
+
+  const server = app.listen(port, () => {
+    console.error(`[bridge] console API on http://localhost:${port}`);
+  });
+
+  if (options.endpoint) {
+    try {
+      await mcp.connectToEndpoint(options.endpoint);
+    } catch {
+      // MCP client will auto-reconnect via its backoff loop
+    }
+  }
+
+  return {
+    shutdown: async () => {
+      await mcp.shutdown();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
 }
 
-process.once("SIGTERM", () => { void shutdown("SIGTERM"); });
-process.once("SIGINT",  () => { void shutdown("SIGINT");  });
+// ── Standalone entry (npm run dev:server) ──────────────────────────
 
-// Prevent unhandled rejections from crashing the server
-process.on("unhandledRejection", (err) => {
-  console.error("[server] Unhandled rejection (non-fatal):", err);
-});
+const isMain = process.argv[1] === fileURLToPath(import.meta.url);
+
+if (isMain) {
+  const port = Number(process.env["PORT"] ?? 3456);
+  const bridge = await startBridge({ port });
+
+  async function shutdown(signal: string): Promise<void> {
+    console.error(`\n[bridge] ${signal} received — shutting down`);
+    await bridge.shutdown();
+    process.exit(0);
+  }
+
+  process.once("SIGTERM", () => { void shutdown("SIGTERM"); });
+  process.once("SIGINT",  () => { void shutdown("SIGINT");  });
+  process.on("unhandledRejection", (err) => {
+    console.error("[bridge] Unhandled rejection (non-fatal):", err);
+  });
+}

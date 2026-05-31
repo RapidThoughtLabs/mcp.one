@@ -8,6 +8,7 @@ import { startWatcher } from "../watcher.js";
 import { checkAuthEnvVars } from "../auth/index.js";
 import { resolveConfigDir } from "../lib/resolve-config-dir.js";
 import { VERSION } from "../lib/version.js";
+import { startBridge } from "../../server/index.js";
 import { log } from "../lib/logger.js";
 import { loadAllConfigEnvs } from "../lib/env-store.js";
 import { INTERNAL_CONFIG } from "../internal-config.js";
@@ -336,8 +337,20 @@ export async function run(args: string[]): Promise<void> {
   // ── Bind internal connector with live server context ────────────
   internalConnector.bind({ registry, notifyToolsChanged, configDir });
 
+  // ── Auto-start console bridge when running in HTTP mode ─────────────
+  // The bridge (port 3456) is what the web console talks to — it proxies
+  // admin calls and maintains an MCP client connection back to this server.
+
+  let bridgeShutdown: (() => Promise<void>) | null = null;
+
+  if (httpMode) {
+    const bridge = await startBridge({ endpoint: `http://localhost:${port}` });
+    bridgeShutdown = bridge.shutdown;
+  }
+
   // Graceful shutdown
   const shutdown = async () => {
+    if (bridgeShutdown) await bridgeShutdown();
     await connectorRegistry.teardownAll();
     process.exit(0);
   };
