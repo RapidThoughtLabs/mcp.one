@@ -16,6 +16,16 @@ export async function startBridge(options: {
 
   const app = express();
 
+  // Chrome 104+ Private Network Access: requests from a public HTTPS origin
+  // (console.rapidthoughtlabs.space) to a private address (127.0.0.1) require
+  // this header on the preflight or the browser blocks them as a CORS error.
+  app.use((req, res, next) => {
+    if (req.headers["access-control-request-private-network"]) {
+      res.setHeader("Access-Control-Allow-Private-Network", "true");
+    }
+    next();
+  });
+
   app.use(cors({
     origin: [
       "http://localhost:5173",
