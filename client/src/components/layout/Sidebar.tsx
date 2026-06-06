@@ -132,7 +132,7 @@ export function Sidebar() {
         {configWriteLock && (
           <Lock
             size={11}
-            title="Config write lock ON"
+            aria-label="Config write lock ON"
             style={{ color: 'var(--yellow)', flexShrink: 0, marginRight: 4 }}
           />
         )}
