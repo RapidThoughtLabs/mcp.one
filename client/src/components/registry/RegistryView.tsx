@@ -6,7 +6,7 @@ import { RegistryBrowse } from './RegistryBrowse'
 import { RegistryDetail } from './RegistryDetail'
 import type { RegistryConfigMeta, RegistrySource } from '@/types/registry'
 
-const LS_KEY = 'mcp-one:registry:selectedSource'
+const LS_KEY = 'heku:registry:selectedSource'
 
 export function RegistryView() {
   const selectedRegistry  = useAppStore((s) => s.registrySource)

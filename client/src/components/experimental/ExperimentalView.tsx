@@ -186,7 +186,7 @@ function AuthorInstructions() {
         {[
           'Copy the snippet above and fill in your values.',
           'Save as mcp-configs/mcp.{your-id}.json alongside your other configs.',
-          'mcp.one hot-reloads — no restart needed.',
+          'heku hot-reloads — no restart needed.',
           'The config will appear in Configs with an "experimental" tag.',
         ].map((step, i) => (
           <li key={i} style={{ fontSize: '0.85rem', color: 'var(--text-dim)', lineHeight: 1.5, letterSpacing: '0.01em' }}>
@@ -289,7 +289,7 @@ export function ExperimentalView() {
           marginBottom: 8,
         }}>
           <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-dim)', lineHeight: 1.6, letterSpacing: '0.01em' }}>
-            These connector types ship with mcp.one but are outside the v0.1.0 supported surface. The runtime executes them, but each has known rough edges documented below. There is no designer UI — power users can author configs by hand using the snippets provided. Self-authored configs appear in{' '}
+            These connector types ship with heku but are outside the v0.1.0 supported surface. The runtime executes them, but each has known rough edges documented below. There is no designer UI — power users can author configs by hand using the snippets provided. Self-authored configs appear in{' '}
             <span style={{ color: 'var(--text)' }}>Configs</span>
             {' '}with an <span style={{ color: 'rgba(255,200,0,0.85)' }}>experimental</span> tag and are editable through the available UI.
           </p>

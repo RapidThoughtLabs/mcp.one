@@ -86,7 +86,7 @@ export function ServerConnect() {
             fontWeight: 700,
             marginBottom: 8,
           }}>
-            MCP.ONE
+            HEKU
           </div>
           <div style={{
             fontSize: '1.69rem',
@@ -98,8 +98,8 @@ export function ServerConnect() {
             Connect to a server
           </div>
           <div style={{ fontSize: '0.85rem', color: 'var(--text-dim)', lineHeight: 1.6 }}>
-            Enter the HTTP endpoint of your mcp-one instance.<br />
-            Start one with <code style={{ color: 'var(--accent)', background: 'var(--accent-dim)', padding: '1px 5px', borderRadius: 3 }}>mcp-one start --http</code>
+            Enter the HTTP endpoint of your heku instance.<br />
+            Start one with <code style={{ color: 'var(--accent)', background: 'var(--accent-dim)', padding: '1px 5px', borderRadius: 3 }}>heku start --http</code>
           </div>
         </div>
 

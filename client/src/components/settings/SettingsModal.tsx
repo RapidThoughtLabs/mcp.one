@@ -199,7 +199,7 @@ function ServerTab() {
       })
       if (!res.ok) throw new Error('Failed')
     } catch {
-      toast.error('Could not apply setting — mcp-one may not be connected')
+      toast.error('Could not apply setting — heku may not be connected')
     }
   }
 
@@ -229,7 +229,7 @@ function ServerTab() {
 
       {unavailable && (
         <div style={{ fontSize: '0.77rem', color: 'var(--text-dim)', marginBottom: 12, padding: '6px 10px', background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)', letterSpacing: '0.04em' }}>
-          mcp-one not connected — settings are read-only
+          heku not connected — settings are read-only
         </div>
       )}
 
@@ -245,7 +245,7 @@ function ServerTab() {
         />
       </SettingRow>
 
-      <SettingRow label="Log level" sub="Verbosity of mcp-one server output">
+      <SettingRow label="Log level" sub="Verbosity of heku server output">
         <SegCtrl
           options={[
             { value: 'info' as LogLevel, label: 'INFO' },
@@ -309,7 +309,7 @@ function RuntimeTab() {
       })
       if (!res.ok) throw new Error('Failed')
     } catch {
-      toast.error('Could not apply setting — mcp-one may not be connected')
+      toast.error('Could not apply setting — heku may not be connected')
     }
   }
 
@@ -339,7 +339,7 @@ function RuntimeTab() {
 
       {unavailable && (
         <div style={{ fontSize: '0.77rem', color: 'var(--text-dim)', marginBottom: 12, padding: '6px 10px', background: 'var(--bg)', borderRadius: 6, border: '1px solid var(--border)', letterSpacing: '0.04em' }}>
-          mcp-one not connected — settings are read-only
+          heku not connected — settings are read-only
         </div>
       )}
 
@@ -348,11 +348,11 @@ function RuntimeTab() {
         Lifecycle
       </div>
 
-      <SettingRow label="Block auto-install" sub="Prevent mcp-one from running install commands on startup">
+      <SettingRow label="Block auto-install" sub="Prevent heku from running install commands on startup">
         <Toggle checked={blockAutoInstall} onChange={handleBlockAutoInstall} disabled={loading || unavailable} />
       </SettingRow>
 
-      <SettingRow label="Block auto-start" sub="Prevent mcp-one from auto-spawning MCP subprocesses">
+      <SettingRow label="Block auto-start" sub="Prevent heku from auto-spawning MCP subprocesses">
         <Toggle checked={blockAutoStart} onChange={handleBlockAutoStart} disabled={loading || unavailable} />
       </SettingRow>
 
@@ -583,7 +583,7 @@ function AboutTab() {
         <span style={{ fontSize: '0.77rem', color: 'var(--text-dim)' }}>v{__APP_VERSION__}</span>
       </SettingRow>
 
-      <SettingRow label="mcp-one server" sub="MCP protocol layer">
+      <SettingRow label="heku server" sub="MCP protocol layer">
         <span style={{ fontSize: '0.77rem', color: 'var(--text-dim)' }}>{mcpServerVersion ? `v${mcpServerVersion}` : 'unknown'}</span>
       </SettingRow>
 
@@ -592,7 +592,7 @@ function AboutTab() {
       </SettingRow>
 
       <div style={{ padding: '16px 0', fontSize: '0.77rem', color: 'var(--text-dim)', lineHeight: 1.7, letterSpacing: '0.04em' }}>
-        Built by RapidThoughtLabs. mcp.one is an open-source MCP server that turns JSON configs into working API tools.
+        Built by RapidThoughtLabs. heku is an open-source MCP server that turns JSON configs into working API tools.
       </div>
     </div>
   )

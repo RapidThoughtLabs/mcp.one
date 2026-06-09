@@ -73,7 +73,7 @@ export function PromptsView() {
         }}
       >
         <span style={{ fontSize: '0.85rem', letterSpacing: '0.12em', color: 'var(--text-dim)' }}>
-          <span style={{ color: 'var(--accent)' }}>mcp.one</span> / prompts
+          <span style={{ color: 'var(--accent)' }}>heku</span> / prompts
         </span>
         <div style={{ flex: 1 }} />
         <span

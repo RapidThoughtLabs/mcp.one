@@ -147,7 +147,7 @@ export function McpPanel() {
             }}
           >
             <Loader2 size={24} style={{ opacity: 0.3, animation: 'spin 1s linear infinite' }} />
-            <span style={{ fontSize: '0.77rem', letterSpacing: '0.06em' }}>Connecting to mcp-one...</span>
+            <span style={{ fontSize: '0.77rem', letterSpacing: '0.06em' }}>Connecting to heku...</span>
           </div>
         ) : tools.length === 0 ? (
           <div

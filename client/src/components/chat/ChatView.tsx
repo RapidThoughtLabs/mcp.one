@@ -66,7 +66,7 @@ export function ChatView() {
         }}
       >
         <span style={{ fontSize: '0.85rem', letterSpacing: '0.12em', color: 'var(--text-dim)' }}>
-          <span style={{ color: 'var(--accent)' }}>mcp.one</span> / chat
+          <span style={{ color: 'var(--accent)' }}>heku</span> / chat
         </span>
 
         {/* Template selector */}

@@ -47,7 +47,7 @@ export function LogsView() {
       setError(null)
     } catch {
       if (!mountedRef.current) return
-      setError('Could not reach server — is mcp-one running?')
+      setError('Could not reach server — is heku running?')
     }
     if (mountedRef.current) {
       timerRef.current = setTimeout(fetchLogs, POLL_MS)
