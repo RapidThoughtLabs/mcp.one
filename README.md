@@ -14,7 +14,7 @@ Stop building one MCP server per API. Build one config.
 - **Hot-reload** — add or edit a config, tools update live without restart
 - **Auto-discovery** — gRPC reflection, GraphQL introspection, and child MCP tool listing fill in tools automatically
 - **Built-in console UI** — React dashboard for chat, config editing, and registry browsing
-- **Registry** — publish and install community configs from [mcp.rapidthoughtlabs.space](https://mcp.rapidthoughtlabs.space)
+- **Registry** — publish and install community configs from [app.rapidthoughtlabs.space](https://app.rapidthoughtlabs.space)
 - **Auth handled** — bearer, basic, API key, and OAuth2 with `.env`-based credential management
 - **Self-managing** — the server can create and edit its own configs via internal tools
 
