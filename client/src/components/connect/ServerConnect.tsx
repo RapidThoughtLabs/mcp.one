@@ -79,15 +79,27 @@ export function ServerConnect() {
 
         {/* Logo / title */}
         <div style={{ textAlign: 'center', marginBottom: 40 }}>
-          <div style={{
-            fontSize: '0.85rem',
-            letterSpacing: '0.25em',
+          <pre style={{
+            fontFamily: "'DM Mono', 'Fira Mono', monospace",
+            fontSize: '0.62rem',
+            lineHeight: 1.2,
             color: 'var(--accent)',
-            fontWeight: 700,
-            marginBottom: 8,
-          }}>
-            HEKU
-          </div>
+            margin: '0 0 24px',
+            letterSpacing: '0.02em',
+            userSelect: 'none',
+          }}>{[
+            '      ___           ___           ___           ___     ',
+            '     /__/\\         /  /\\         /__/|         /__/\\    ',
+            '     \\  \\:\\       /  /:/_       |  |:|         \\  \\:\\   ',
+            '      \\__\\:\\     /  /:/ /\\      |  |:|          \\  \\:\\  ',
+            '  ___ /  /::\\   /  /:/ /:/_   __|  |:|      ___  \\  \\:\\ ',
+            ' /__/\\  /:/\\:\\ /__/:/ /:/ /\\ /__/\\_|:|____ /__/\\  \\__\\:\\',
+            ' \\  \\:\\/:/__\\/ \\  \\:\\/:/ /:/ \\  \\:\\/:::::/ \\  \\:\\ /  /:/',
+            '  \\  \\::/       \\  \\::/ /:/   \\  \\::/~~~~   \\  \\:\\  /:/ ',
+            '   \\  \\:\\        \\  \\:\\/:/     \\  \\:\\        \\  \\:\\/:/  ',
+            '    \\  \\:\\        \\  \\::/       \\  \\:\\        \\  \\::/   ',
+            '     \\__\\/         \\__\\/         \\__\\/         \\__\\/    ',
+          ].join('\n')}</pre>
           <div style={{
             fontSize: '1.69rem',
             color: 'var(--text)',

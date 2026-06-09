@@ -56,7 +56,7 @@ export function Sidebar() {
           <span style={{ color: 'var(--accent)', fontWeight: 700 }}>rtl</span>://
         </a>
         <div style={{ fontSize: '1.38rem', fontWeight: 500, fontFamily: "'DM Mono', monospace", color: 'var(--text)', letterSpacing: '-0.03em' }}>
-          mcp<span style={{ color: 'var(--accent)' }}>.</span>one
+          he<span style={{ color: 'var(--accent)' }}>k</span>u
         </div>
       </div>
 
