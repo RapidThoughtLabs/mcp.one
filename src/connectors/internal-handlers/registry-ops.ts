@@ -281,6 +281,131 @@ export async function handleRegistryInstall(
   }
 }
 
+export async function handleRegistryUpdate(
+  ctx: InternalContext,
+  args: Record<string, unknown>,
+): Promise<ConnectorResult> {
+  const configId = args.config_id as string | undefined;
+  const registry = (args.registry as string | undefined) ?? "default";
+
+  const { installed } = loadManifest();
+  const forRegistry = installed.filter((e) => e.registry === registry);
+
+  let toCheck: typeof installed;
+
+  if (configId) {
+    // Find the manifest entry that matches this compound config ID (e.g. "github-http")
+    const entry = forRegistry.find((e) => {
+      const withoutNs = e.slug.replace(/^@[^/]+\//, "");
+      const colonIdx  = withoutNs.indexOf(":");
+      if (colonIdx === -1) return false;
+      const base = withoutNs.slice(0, colonIdx);
+      const ct   = withoutNs.slice(colonIdx + 1);
+      return `${base}-${ct}` === configId;
+    });
+    if (!entry) {
+      return {
+        success: false,
+        data: { error: `"${configId}" is not a registry-installed config or was not found in the manifest. Only configs installed from the registry can be updated this way.` },
+      };
+    }
+    toCheck = [entry];
+  } else {
+    if (forRegistry.length === 0) {
+      return { success: true, data: { message: "No registry-installed configs to update", updated: [], up_to_date: [] } };
+    }
+    toCheck = forRegistry;
+  }
+
+  let updateCheck: Awaited<ReturnType<typeof checkUpdates>>;
+  try {
+    updateCheck = await checkUpdates(
+      toCheck.map((e) => ({ slug: e.slug, version: e.version })),
+      registry,
+    );
+  } catch (err) {
+    if (err instanceof RegistryError) {
+      return { success: false, data: { error: err.message, status: err.status } };
+    }
+    return { success: false, data: { error: (err as Error).message } };
+  }
+
+  if (updateCheck.updates.length === 0) {
+    return {
+      success: true,
+      data: { message: "All configs are up to date", up_to_date: updateCheck.up_to_date },
+    };
+  }
+
+  const updated: { slug: string; id: string; from: string; to: string }[] = [];
+  const errors:  { slug: string; error: string }[] = [];
+
+  for (const info of updateCheck.updates) {
+    // Parse "@ns/slug:connector" from the slug
+    const withoutAt  = info.slug.startsWith("@") ? info.slug.slice(1) : info.slug;
+    const slashIdx   = withoutAt.indexOf("/");
+    if (slashIdx === -1) continue;
+    const namespace  = withoutAt.slice(0, slashIdx);
+    const rest       = withoutAt.slice(slashIdx + 1);
+    const colonIdx   = rest.indexOf(":");
+    const rawSlug    = colonIdx !== -1 ? rest.slice(0, colonIdx) : rest;
+    const connType   = colonIdx !== -1 ? rest.slice(colonIdx + 1) : undefined;
+    const installedId = `${rawSlug}-${connType ?? ""}`;
+    const outFile    = path.join(ctx.configDir, `mcp.${installedId}.json`);
+
+    try {
+      const { payload, version: resolvedVersion } = await fetchVersionPayload(
+        namespace, rawSlug, connType, info.latest_version, registry,
+      );
+
+      const payloadObj = payload as Record<string, unknown>;
+      payloadObj.id    = installedId;
+
+      // Preserve local env vars and overlays from existing file
+      if (fs.existsSync(outFile)) {
+        try {
+          const existing = JSON.parse(fs.readFileSync(outFile, "utf-8")) as Record<string, unknown>;
+          const existingConnector = existing.connector as Record<string, unknown> | undefined;
+          if (existingConnector?.env) {
+            const newConnector = (payloadObj.connector as Record<string, unknown> | undefined) ?? {};
+            newConnector.env   = existingConnector.env;
+            payloadObj.connector = newConnector;
+          }
+          const existingOverlays = (existing.overlays ?? {}) as Record<string, unknown>;
+          const newOverlays      = (payloadObj.overlays ?? {}) as Record<string, unknown>;
+          payloadObj.overlays    = { ...existingOverlays, ...newOverlays };
+        } catch {
+          // Can't read existing file — proceed with fresh payload
+        }
+      }
+
+      fs.mkdirSync(ctx.configDir, { recursive: true });
+      fs.writeFileSync(outFile, JSON.stringify(payloadObj, null, 2) + "\n", "utf-8");
+      addToManifest(info.slug, resolvedVersion, connType ?? "", registry);
+
+      updated.push({ slug: info.slug, id: installedId, from: info.installed_version, to: resolvedVersion });
+    } catch (err) {
+      if (err instanceof RegistryError) {
+        errors.push({ slug: info.slug, error: err.message });
+      } else {
+        errors.push({ slug: info.slug, error: (err as Error).message });
+      }
+    }
+  }
+
+  return {
+    success: errors.length === 0,
+    data: {
+      message: updated.length > 0
+        ? `Updated ${updated.length} config(s).${errors.length > 0 ? ` ${errors.length} failed.` : ""} Server will hot-reload automatically.`
+        : `All configs are up to date.`,
+      updated,
+      up_to_date: updateCheck.up_to_date,
+      ...(errors.length > 0 && { errors }),
+    },
+  };
+}
+
 export async function handleRegistryCheckUpdates(
   _ctx: InternalContext,
   args: Record<string, unknown>,

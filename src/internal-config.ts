@@ -31,21 +31,19 @@ export const INTERNAL_CONFIG: McpConfig = {
     {
       name: "list_configs",
       description:
-        "**Start here.** Returns the names of all active configs as a flat array. " +
-        "Config IDs follow the pattern `<base>-<connector>` where connector is one of: " +
-        "http, cli, file, grpc, graphql, mcp, sql, mongodb. " +
-        "Use these names to scope `one.search` or `one.list_tools`.",
+        "**Start here.** Returns all active configs as an array of objects with `id`, `name`, and `description`. " +
+        "Config IDs follow the pattern `<base>-<connector>` (e.g. `github-http`, `linear-graphql`). " +
+        "Use the description to pick the right config, then pass its `id` to `search` or `list_tools`.",
       params: [],
     },
     {
       name: "search",
       description:
         "Find tools by name or intent across all configs (or within a specific one). " +
-        "Returns matching tools with full schemas grouped by match quality: " +
-        "exact name match first, then partial, then description, then related. " +
-        "Indexes both native `one.*` self-management tools and all service tools. " +
-        "Pass config for exact-first matching: 'github-http' returns only github-http tools; " +
-        "'github' matches both github-http and github-cli.",
+        "Returns matching tools with full schemas grouped by quality: exact → partial → description → related. " +
+        "Covers both native `one.*` self-management tools and all loaded service tools. " +
+        "Narrow by config: `github-http` returns only github-http tools; `github` matches github-http and github-cli. " +
+        "Once you have a tool name, call `invoke` with `config_id.tool_name` to execute it.",
       params: [
         {
           name: "query",
@@ -63,7 +61,10 @@ export const INTERNAL_CONFIG: McpConfig = {
     },
     {
       name: "invoke",
-      description: "Execute any registered tool by its qualified name (config_id.tool_name). Use after one.search or one.list_tools to run the tool you found. Works for all service tools (open-meteo-http.get_forecast, github-http.create_issue, etc.) and all one.* self-management tools.",
+      description:
+        "Execute any registered tool by its qualified name (`config_id.tool_name`). " +
+        "Workflow: (1) list_configs → pick a config id, (2) search or list_tools → get the tool name and required args, (3) invoke → run it. " +
+        "Examples: `github-http.create_issue`, `linear-graphql.create_issue`, `one.server_status`.",
       params: [
         {
           name: "tool",
@@ -183,6 +184,14 @@ export const INTERNAL_CONFIG: McpConfig = {
       description: "Check all installed configs for available updates from the registry.",
       params: [
         { name: "registry", type: "string", required: false, description: "Registry source name (default: 'default')" },
+      ],
+    },
+    {
+      name: "registry_update",
+      description: "Update registry-installed configs to the latest available version. Preserves local credentials (connector.env) and overlays. Pass config_id to update a single config, or omit to update all installed configs.",
+      params: [
+        { name: "config_id", type: "string",  required: false, description: "ID of the config to update (e.g. 'github-http'). Omit to update all installed configs." },
+        { name: "registry",  type: "string",  required: false, description: "Registry source name (default: 'default')" },
       ],
     },
     {

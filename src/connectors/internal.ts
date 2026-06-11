@@ -89,6 +89,7 @@ import {
   handleRegistryBrowse,
   handleRegistryInstall,
   handleRegistryCheckUpdates,
+  handleRegistryUpdate,
 } from "./internal-handlers/registry-ops.js";
 
 import {
@@ -129,6 +130,7 @@ const HANDLERS: Record<string, Handler> = {
   registry_browse:        handleRegistryBrowse,
   registry_install:       handleRegistryInstall,
   registry_check_updates: handleRegistryCheckUpdates,
+  registry_update:        handleRegistryUpdate,
 
   // Auth
   auth_status: handleAuthStatus,

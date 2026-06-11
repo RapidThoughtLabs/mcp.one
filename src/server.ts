@@ -32,6 +32,8 @@ export class ToolRegistry {
       }
       this.tools.set(qualifiedName, {
         configId: config.id,
+        configName: config.name,
+        configDescription: config.description,
         connectorConfig: config.connector,
         tool,
       });
@@ -85,7 +87,7 @@ function buildManifestView(style: ManifestStyle, registry: ToolRegistry) {
 const BLOCKED_WHEN_LOCKED = new Set([
   "one.create_config", "one.update_config", "one.delete_config",
   "one.add_tool",      "one.remove_tool",   "one.update_tool",
-  "one.registry_install", "one.auth_set",
+  "one.registry_install", "one.registry_update", "one.auth_set",
 ]);
 
 function blockedTool(qualifiedName: string, args: Record<string, unknown>): string | null {
@@ -115,7 +117,9 @@ function makeServer(
     const { visible, rewrite } = buildManifestView(manifestStyle, registry);
     const tools = visible.map((rt) => ({
       name: rewrite(`${rt.configId}.${rt.tool.name}`),
-      description: `[${rt.configId}] ${rt.tool.description}`,
+      description: manifestStyle === "flat"
+        ? rt.tool.description
+        : `[${rt.configId}] ${rt.tool.description}`,
       inputSchema: buildInputSchema(rt.tool.params),
     }));
     return { tools };

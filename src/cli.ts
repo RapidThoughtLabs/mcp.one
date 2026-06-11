@@ -10,18 +10,11 @@ import { run as runFork } from "./commands/fork.js";
 import { run as runInstall } from "./commands/install.js";
 import { run as runUninstall } from "./commands/uninstall.js";
 import { run as runUpdate } from "./commands/update.js";
-import { checkForUpdate } from "./lib/update-check.js";
 
 // ── Parse command ─────────────────────────────────────────────────
 
 const args = process.argv.slice(2);
 const command = args[0] ?? "start";
-
-// ── Update check (fire-and-forget, safe for all commands) ─────────
-// Skip for the `update` command itself — it does its own check.
-if (command !== "update") {
-  checkForUpdate();
-}
 
 // ── Route ─────────────────────────────────────────────────────────
 
@@ -93,11 +86,12 @@ function printUsage(): void {
     heku auth setup [service]         Interactive credential setup wizard
     heku install <target>             Install a config from the registry
     heku uninstall <target>           Remove an installed registry config
+    heku update                       Update all installed configs to latest versions
+    heku update <config>              Update a specific config (e.g. github-http or @ns/github:http)
     heku login                        Log in to the mcp.rtl.space registry
     heku logout                       Log out of the registry
     heku publish [file]               Publish a config to the registry
     heku fork <namespace/slug>        Fork a registry config into your namespace
-    heku update                       Update heku to the latest version
     heku help                         Show this message
 
   HTTP mode:

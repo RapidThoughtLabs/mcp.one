@@ -274,6 +274,8 @@ export interface McpConfig {
 
 export interface RegisteredTool {
   configId: string;
+  configName?: string;
+  configDescription?: string;
   connectorConfig: ConnectorConfig; // data, not an instance
   tool: ToolDef;
 }

@@ -120,7 +120,17 @@ export async function handleListConfigs(
   ctx: InternalContext,
   _args: Record<string, unknown>,
 ): Promise<ConnectorResult> {
-  const configs = [...new Set(ctx.registry.list().map((rt) => rt.configId))].sort();
+  const seen = new Map<string, { id: string; name?: string; description?: string }>();
+  for (const rt of ctx.registry.list()) {
+    if (!seen.has(rt.configId)) {
+      seen.set(rt.configId, {
+        id: rt.configId,
+        ...(rt.configName        && { name:        rt.configName }),
+        ...(rt.configDescription && { description: rt.configDescription }),
+      });
+    }
+  }
+  const configs = [...seen.values()].sort((a, b) => a.id.localeCompare(b.id));
   return { success: true, data: { configs } };
 }
 

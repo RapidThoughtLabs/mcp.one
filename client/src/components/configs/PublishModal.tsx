@@ -72,9 +72,10 @@ export function PublishModal({ open, onClose, cfg, mode = 'publish' }: PublishMo
   const [tagsRaw, setTagsRaw]       = useState('')
   const [visibility, setVisibility] = useState<'public' | 'private'>('public')
   const [message, setMessage]       = useState('')
-  const [version, setVersion]       = useState('')
+  const [version, setVersion]           = useState('')
   const [versionError, setVersionError] = useState<string | null>(null)
   const [isExistingConfig, setIsExistingConfig] = useState(false)
+  const [latestVersion, setLatestVersion]       = useState<string | null>(null)
   const [error, setError]           = useState<string | null>(null)
   const [result, setResult]         = useState<PublishResult | null>(null)
 
@@ -96,6 +97,7 @@ export function PublishModal({ open, onClose, cfg, mode = 'publish' }: PublishMo
       if (data.tags?.length) setTagsRaw(data.tags.join(', '))
       if (data.latest_version) {
         setIsExistingConfig(true)
+        setLatestVersion(data.latest_version.version)
         setVersion(patchBump(data.latest_version.version))
       }
     }).catch(() => {}) // non-critical — config may not be from registry
@@ -114,6 +116,7 @@ export function PublishModal({ open, onClose, cfg, mode = 'publish' }: PublishMo
       setVersion('')
       setVersionError(null)
       setIsExistingConfig(false)
+      setLatestVersion(null)
       setError(null)
       setResult(null)
     }
@@ -145,7 +148,7 @@ export function PublishModal({ open, onClose, cfg, mode = 'publish' }: PublishMo
         tags,
         visibility,
         message:     message.trim() || undefined,
-        version:     isExistingConfig ? version.trim() || undefined : undefined,
+        version:     version.trim() || undefined,
         payload:     buildPublishPayload(cfg),
       })
       setResult(data)
@@ -191,19 +194,21 @@ export function PublishModal({ open, onClose, cfg, mode = 'publish' }: PublishMo
                 Publishing as <code style={{ color: 'var(--accent)' }}>@{authUsername}</code>
               </div>
             )}
-            {isExistingConfig && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <Field
-                  label="Version"
-                  value={version}
-                  onChange={(v) => { setVersion(v); setVersionError(null) }}
-                  placeholder="e.g. 1.0.1"
-                />
-                {versionError && (
-                  <span style={{ fontSize: '0.77rem', color: 'var(--red)', letterSpacing: '0.03em' }}>{versionError}</span>
-                )}
-              </div>
-            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <Field
+                label="Version"
+                value={version}
+                onChange={(v) => { setVersion(v); setVersionError(null) }}
+                placeholder={isExistingConfig ? undefined : 'e.g. 1.0.0'}
+                hint={latestVersion
+                  ? `Published at v${latestVersion} — must be greater to push a new version`
+                  : 'Not published yet — enter a starting version'
+                }
+              />
+              {versionError && (
+                <span style={{ fontSize: '0.77rem', color: 'var(--red)', letterSpacing: '0.03em' }}>{versionError}</span>
+              )}
+            </div>
             <Field label="Description" value={description} onChange={setDescription} placeholder="What does this config do?" />
             <Field label="Category" value={category} onChange={setCategory} placeholder="e.g. development, productivity, data" />
             <Field label="Tags" value={tagsRaw} onChange={setTagsRaw} placeholder="Comma-separated (optional)" />
