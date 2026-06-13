@@ -22,6 +22,7 @@ export function RegistryCard({ config, isInstalled, updateInfo, onClick }: Regis
       style={{
         display: 'block',
         width: '100%',
+        padding: 0,
         background: 'var(--surface)',
         border: '1px solid var(--border)',
         borderRadius: 6,
