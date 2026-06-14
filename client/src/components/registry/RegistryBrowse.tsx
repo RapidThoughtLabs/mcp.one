@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, RefreshCw, Loader2, PackageSearch, SlidersHorizontal, X } from 'lucide-react'
+import { Search, RefreshCw, Loader2, PackageSearch, SlidersHorizontal, X, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { RegistryCard } from './RegistryCard'
 import type { RegistryConfigMeta, RegistryUpdateInfo, RegistrySource } from '@/types/registry'
@@ -97,6 +97,15 @@ export function RegistryBrowse({
           <span style={{ color: 'var(--accent)' }}>registry</span> / browse
         </span>
         {loading && <Loader2 size={11} style={{ color: 'var(--text-dim)', animation: 'spin 1s linear infinite' }} />}
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          padding: '2px 8px', borderRadius: 99,
+          background: 'var(--green-dim)',
+          fontSize: '0.62rem', letterSpacing: '0.08em', color: 'var(--green-text)',
+        }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--green)', flexShrink: 0 }} />
+          {selectedRegistry}
+        </span>
         <div style={{ flex: 1 }} />
         {hasActiveSearch && (
           <span style={{ fontSize: '0.77rem', color: 'var(--text-dim)' }}>
@@ -133,6 +142,15 @@ export function RegistryBrowse({
         </Button>
         <Button size="sm" variant="ghost" onClick={onRefetch} title="Refresh">
           <RefreshCw size={11} />
+        </Button>
+        <Button
+          size="sm"
+          variant="primary"
+          onClick={() => window.open('https://app.rapidthoughtlabs.space', '_blank')}
+          title="Open heku hub"
+        >
+          <ExternalLink size={10} style={{ marginRight: 5 }} />
+          heku hub
         </Button>
       </div>
 
